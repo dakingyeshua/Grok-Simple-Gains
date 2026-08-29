@@ -37,7 +37,7 @@ def get_engine() -> Engine:
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
     payload = get_engine().dashboard_payload()
-    return templates.TemplateResponse("index.html", {"request": request, "d": payload})
+    return templates.TemplateResponse(request, "index.html", {"d": payload})
 
 
 @app.get("/api/state")
