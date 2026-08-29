@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from simple_gains.clock import CHICAGO, Clock, regular_open
-from simple_gains.config import STARTING_EQUITY
 from simple_gains.data.fixtures import FixtureData, make_orb_bars
 from simple_gains.engine import Engine, build_broker
 from simple_gains.models import (

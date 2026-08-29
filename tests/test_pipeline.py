@@ -128,6 +128,15 @@ def test_book_cap_skips_when_6pct_full():
     assert decision.skip_reason == "book_risk_cap_6pct"
 
 
+def test_default_paper_book_starts_at_1000(store):
+    broker = build_broker(store, "paper")
+    acct = store.ensure_account()
+    assert acct.starting_equity == Decimal("1000")
+    assert acct.equity == Decimal("1000")
+    assert acct.cash == Decimal("1000")
+    assert broker.equity() == Decimal("1000")
+
+
 def test_paper_fill_marks_equity_not_notional(store):
     from pathlib import Path
 
@@ -145,7 +154,7 @@ def test_paper_fill_marks_equity_not_notional(store):
     after = broker.equity()
     # Long at 185.60, last 186.50 — small winner, not a 25% hole.
     assert after >= before
-    assert after > Decimal("99000")
+    assert after > Decimal("990")
 
 
 def test_fixture_session_fills_aapl_and_journals(engine):

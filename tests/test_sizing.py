@@ -1,6 +1,12 @@
 from decimal import Decimal
 
-from simple_gains.config import BOOK_RISK_CAP_PCT, RISK_CEILING_PCT, STARTING_EQUITY, THEME_NAME_CAP
+from simple_gains.config import (
+    BOOK_RISK_CAP_PCT,
+    MAX_NOTIONAL_PCT,
+    RISK_CEILING_PCT,
+    STARTING_EQUITY,
+    THEME_NAME_CAP,
+)
 from simple_gains.lanes.risk import (
     apply_sanity_cap,
     open_book_risk,
@@ -57,6 +63,16 @@ def test_sanity_cap_blocks_micro_stop_balloon():
     assert capped <= int(equity * Decimal("0.25") / entry)
 
 
+def test_default_book_notional_cap_is_250():
+    """25% of the $1,000 paper book is $250. Do not loosen to chase expensive names."""
+    assert STARTING_EQUITY == Decimal("1000")
+    assert MAX_NOTIONAL_PCT == Decimal("0.25")
+    assert STARTING_EQUITY * MAX_NOTIONAL_PCT == Decimal("250")
+    entry = Decimal("400")  # above the $250 cap
+    raw = size_shares(STARTING_EQUITY, Decimal("0.020"), entry, Decimal("390"))
+    assert apply_sanity_cap(raw, STARTING_EQUITY, entry) == 0
+
+
 def test_book_risk_cap_6pct():
     pos = Position(
         ticker="AAA",
@@ -72,9 +88,10 @@ def test_book_risk_cap_6pct():
         opened_at=chicago(10),
         last_price=Decimal("100"),
     )
-    # $10 * 600 = $6000 = 6% of 100k
+    # $10 * 600 = $6000 = 6% of an injected 100k book (percent math, not the product default)
+    injected = Decimal("100000")
     assert open_book_risk([pos]) == Decimal("6000")
-    assert open_book_risk([pos]) == STARTING_EQUITY * BOOK_RISK_CAP_PCT
+    assert open_book_risk([pos]) == injected * BOOK_RISK_CAP_PCT
 
 
 def test_theme_cap_counts_open_names():
