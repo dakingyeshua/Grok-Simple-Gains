@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simple Gains — paper book</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="tag">Paper / sim only</div>
+      <h1>Simple Gains</h1>
+    </div>
+    <div class="meta">
+      <div>Session {{ d.session }} · {{ d.now }}</div>
+      <div>Mode <span class="gold">{{ d.mode }}</span>
+        {% if d.can_enter %}<span class="pill ok">entries open</span>
+        {% elif d.premarket %}<span class="pill warn">premarket · scan only</span>
+        {% else %}<span class="pill">manage only</span>{% endif %}
+      </div>
+      <div>Equity {{ d.equity }} · cash {{ d.cash }} · HWM {{ d.high_water }}</div>
+    </div>
+  </header>
+  <p class="philosophy">{{ d.philosophy }} No live brokerage orders. Webull stub refuses tickets.</p>
+  <div class="actions">
+    <button onclick="post('/api/scan')">Scan watchlist</button>
+    <button onclick="post('/api/session')">Run paper session</button>
+    <button onclick="post('/api/manage')">Manage stops</button>
+    <a href="/api/state">Raw state</a>
+  </div>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Watchlist</h2>
+      <table>
+        <tr><th>Ticker</th><th>Theme</th><th>Note</th></tr>
+        {% for w in d.watchlist %}
+        <tr><td>{{ w.ticker }}</td><td>{{ w.theme }}</td><td class="muted">{{ w.note }}</td></tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">Empty — run a scan or a fixture session.</td></tr>
+        {% endfor %}
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Open paper positions</h2>
+      <table>
+        <tr><th>Ticker</th><th>Shares</th><th>Fill</th><th>Stop</th><th>Stage</th></tr>
+        {% for p in d.positions %}
+        <tr>
+          <td>{{ p.ticker }}</td>
+          <td>{{ p.shares }}</td>
+          <td>{{ p.fill_price }}</td>
+          <td>{{ p.live_stop }}</td>
+          <td class="muted">{{ p.stop_stage }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No open paper positions.</td></tr>
+        {% endfor %}
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Breaker status</h2>
+      <table>
+        <tr><th>Gate</th><th>State</th></tr>
+        <tr><td>Daily halt</td><td>{% if d.breakers.daily_halt %}<span class="pill bad">{{ d.breakers.daily_reason }}</span>{% else %}<span class="pill ok">open</span>{% endif %}</td></tr>
+        <tr><td>Next session off</td><td>{% if d.breakers.next_session_off %}<span class="pill warn">{{ d.breakers.next_session_off_date }}</span>{% else %}<span class="pill ok">no</span>{% endif %}</td></tr>
+        <tr><td>Post-mortem</td><td>{% if d.breakers.postmortem_required and not d.breakers.postmortem_filed %}<span class="pill warn">required</span>{% else %}<span class="pill ok">ok</span>{% endif %}</td></tr>
+        <tr><td>Weekly halt</td><td>{% if d.breakers.weekly_halt %}<span class="pill bad">review required</span>{% else %}<span class="pill ok">open</span>{% endif %}</td></tr>
+        <tr><td>Portfolio halt</td><td>{% if d.breakers.portfolio_halt %}<span class="pill bad">flatten · re-authorize</span>{% else %}<span class="pill ok">open</span>{% endif %}</td></tr>
+        <tr><td>S-tier count</td><td>{{ d.breakers.s_tier_count }}</td></tr>
+        <tr><td>Loss streak</td><td>{{ d.breakers.consecutive_closed_losses }}</td></tr>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Grader cards</h2>
+      <table>
+        <tr><th>Ticker</th><th>Total</th><th>Tier</th><th>Risk</th><th>Decision</th></tr>
+        {% for c in d.cards %}
+        <tr>
+          <td>{{ c.ticker }}</td>
+          <td>{{ c.total }}</td>
+          <td>{{ c.tier }}</td>
+          <td>{{ c.mapped_risk_pct }}</td>
+          <td>{{ c.decision }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">No cards this session.</td></tr>
+        {% endfor %}
+      </table>
+    </section>
+
+    <section class="panel wide">
+      <h2>Equity curve</h2>
+      <canvas id="curve" height="120"></canvas>
+    </section>
+
+    <section class="panel wide">
+      <h2>Journal (append-only)</h2>
+      <table class="journal">
+        <tr><th>When</th><th>Kind</th><th>Ticker</th><th>Payload</th></tr>
+        {% for e in d.journal %}
+        <tr>
+          <td>{{ e.ts }}</td>
+          <td>{{ e.kind }}</td>
+          <td>{{ e.ticker }}</td>
+          <td class="muted">{{ e.payload }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">Journal is empty.</td></tr>
+        {% endfor %}
+      </table>
+    </section>
+  </div>
+  <script>
+    async function post(url) {
+      await fetch(url, {method: "POST"});
+      location.reload();
+    }
+    const marks = {{ d.equity_curve | tojson }};
+    const ctx = document.getElementById("curve");
+    if (ctx && marks.length) {
+      new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: marks.map(m => m.ts),
+          datasets: [{
+            label: "Paper equity",
+            data: marks.map(m => Number(m.equity)),
+            borderColor: "#d4b45a",
+            backgroundColor: "rgba(212,180,90,0.12)",
+            fill: true,
+            tension: 0.2,
+            pointRadius: 2
+          }]
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { display: false },
+            y: { ticks: { color: "#8b97a8" }, grid: { color: "#2a3340" } }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
