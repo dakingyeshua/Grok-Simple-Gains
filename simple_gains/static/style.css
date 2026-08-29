@@ -1,0 +1,50 @@
+:root {
+  --bg: #0e1116;
+  --panel: #171c24;
+  --panel-2: #1e2530;
+  --line: #2a3340;
+  --text: #e8edf4;
+  --muted: #8b97a8;
+  --gold: #d4b45a;
+  --green: #3dbe8c;
+  --red: #e15b5b;
+  --blue: #6aa3d8;
+  --warn: #e0a14a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 "IBM Plex Sans", "Segoe UI", sans-serif; }
+a { color: var(--gold); }
+header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 20px 28px 12px; border-bottom: 1px solid var(--line);
+}
+header h1 { margin: 0; font-size: 22px; letter-spacing: 0.04em; }
+header .tag { color: var(--gold); font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
+header .meta { text-align: right; color: var(--muted); font-size: 13px; }
+.philosophy { padding: 10px 28px; color: var(--muted); font-style: italic; }
+.actions { padding: 0 28px 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+button {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  padding: 8px 14px; border-radius: 6px; cursor: pointer;
+}
+button:hover { border-color: var(--gold); color: var(--gold); }
+.grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; padding: 0 28px 28px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.panel h2 { margin: 0 0 12px; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+.wide { grid-column: 1 / -1; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+.ok { background: #1a3a2e; color: var(--green); }
+.bad { background: #3a1a1a; color: var(--red); }
+.warn { background: #3a2e1a; color: var(--warn); }
+.gold { color: var(--gold); }
+.muted { color: var(--muted); }
+canvas { width: 100%; max-height: 220px; }
+.journal td:first-child { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; padding: 0 14px 20px; }
+  header { flex-direction: column; gap: 8px; }
+}
