@@ -67,7 +67,7 @@ simple-gains serve
 5. **Risk Officer** sizes, gates, or vetoes. A veto is final for that ticker that day.
 6. **Paper fill** (or HITL alert) at the 5-minute close. Full size. One ticker, one ticket.
 7. **Journal** records signal / skip / fill / stop / trail / breaker / veto.
-8. After **2:00 PM CDT**, only manage open paper positions (trail / stop-out).
+8. After **11:00 AM CDT**, only manage open paper positions (trail / stop-out).
 
 Useful commands:
 
@@ -109,9 +109,9 @@ Copy `.env.example` to `.env` if you want these loaded automatically.
 All product times are **America/Chicago** (CST/CDT).
 
 - Premarket ~**3:00 AM** CDT: scan and context only. **Never orders.**
-- Regular session / new entries: **9:30 AM–2:00 PM CDT**.
+- Regular session / new entries: **9:30 AM–11:00 AM CDT**.
 - First 15-minute candle: **9:30–9:45** America/Chicago. That bar **is** the opening range.
-- After **2:00 PM CDT**: manage open paper positions only (mechanical trail). No new entries.
+- After **11:00 AM CDT**: manage open paper positions only (mechanical trail). No new entries.
 - US cash close used for bar filtering: **3:00 PM CDT** (4:00 PM ET).
 
 This is Aaron’s specified Chicago clock, not a silent conversion to 9:30 ET.
@@ -132,7 +132,7 @@ Patterns of interest (heuristic + HITL override fields on the Grader card): Inve
 ## Hard pre-filters (fail any one = out, never scored)
 
 1. On today’s scan / watchlist
-2. Regular session before 2:00 PM CDT
+2. Regular session before 11:00 AM CDT
 3. First 15-minute candle complete
 4. Liquid enough (see below)
 5. Not halted
