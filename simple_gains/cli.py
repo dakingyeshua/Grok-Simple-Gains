@@ -142,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--asof", help="Freeze clock to an ISO datetime in America/Chicago")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    s = sub.add_parser("init", help="Create the local paper book")
+    s = sub.add_parser("init", help="Create the local paper book ($1,000 default)")
     s.set_defaults(func=cmd_init)
 
     s = sub.add_parser("scan", help="Premarket/context scan → watchlist (no orders)")

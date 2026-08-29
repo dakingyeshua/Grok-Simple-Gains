@@ -32,7 +32,7 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Initialize the local paper book (default starting equity **100000**):
+Initialize the local paper book (default starting equity **1000**):
 
 ```bash
 simple-gains init
@@ -96,7 +96,7 @@ pytest
 | `FINNHUB_API_KEY` | unset | Market data only. Tests and `--fixtures` run without it. |
 | `SIMPLE_GAINS_DB` | `./data/simple_gains.sqlite` | Journal + paper book |
 | `SIMPLE_GAINS_MODE` | `paper` | `paper` \| `hitl` \| `live` |
-| `SIMPLE_GAINS_STARTING_EQUITY` | `100000` | Used when the book is first created |
+| `SIMPLE_GAINS_STARTING_EQUITY` | `1000` | Used when the book is first created |
 | `SIMPLE_GAINS_SLIPPAGE_BPS` | `0` | Extra adverse fill on paper market orders |
 | `SIMPLE_GAINS_HOST` / `SIMPLE_GAINS_PORT` | `127.0.0.1` / `8000` | Dashboard bind |
 
@@ -181,7 +181,7 @@ Every stored card has: ticker, date, session, pre-filter pass list, six bucket s
 
 Do not change these numbers.
 
-- Size off **equity**, never buying power:  
+- Paper (and later live) starting equity is **$1,000**. Size off **equity**, never buying power:  
   `shares = (equity × risk%) ÷ (entry − initial stop)`  
   with a **5 bps** slippage buffer added to the planned stop distance.
 - Initial stop = **5-minute confirmation candle low**.
@@ -213,7 +213,7 @@ Do not change these numbers.
 ### Sanity cap (tiny stops cannot balloon share count)
 
 - Planned stop distance (after buffer) must be at least **max($0.10, 0.20% of entry)** or the Risk Officer **vetoes** (`micro_stop_sanity_cap`).
-- Notional may not exceed **25%** of equity.
+- Notional may not exceed **25%** of equity (**$250** on the $1,000 book). Do not loosen this cap to chase expensive names.
 
 ---
 

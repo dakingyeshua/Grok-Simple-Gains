@@ -63,7 +63,8 @@ TIER_RISK_PCT = {
 S_TIER_FLAG_COUNT = 3  # flag if three S names in a session
 
 # --- Locked risk constitution v1 ---
-STARTING_EQUITY = Decimal("100000")
+# Hard starting budget for paper (and later live). Aaron locked $1,000.
+STARTING_EQUITY = Decimal("1000")
 RISK_CEILING_PCT = Decimal("0.02")       # post-fill hard ceiling
 BOOK_RISK_CAP_PCT = Decimal("0.06")      # max combined open risk
 THEME_NAME_CAP = 2                       # skip, do not resize

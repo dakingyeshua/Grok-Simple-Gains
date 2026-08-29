@@ -27,6 +27,8 @@ def test_dashboard_home_renders(store):
     assert state.status_code == 200
     body = state.json()
     assert body["mode"] == "paper"
+    assert body["starting_equity"] == "1000"
+    assert body["equity"] == "1000"
     assert body["entry_cutoff"] == "11:00"
     assert "entries open until 11:00 CDT" in r.text
     assert "2:00 PM" not in r.text
