@@ -53,14 +53,16 @@ def test_premarket_never_orders():
     assert names["regular_session_before_cutoff"] is False
 
 
-def test_cutoff_2pm_chicago_blocks_new_entries():
+def test_cutoff_11am_chicago_blocks_new_entries():
     snap = make_snap()
     v = _scout(snap, entry_cutoff(SESSION))
     names = {f.name: f.passed for f in v.filters}
     assert names["regular_session_before_cutoff"] is False
-    v_ok = _scout(snap, chicago(13, 59))
+    assert "11:00" in next(f.detail for f in v.filters if f.name == "regular_session_before_cutoff")
+    v_ok = _scout(snap, chicago(10, 59))
     names_ok = {f.name: f.passed for f in v_ok.filters}
     assert names_ok["regular_session_before_cutoff"] is True
+    assert "11:00" in next(f.detail for f in v_ok.filters if f.name == "regular_session_before_cutoff")
 
 
 def test_not_on_watchlist_fails():

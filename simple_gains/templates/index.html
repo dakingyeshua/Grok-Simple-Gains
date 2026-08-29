@@ -16,9 +16,9 @@
     <div class="meta">
       <div>Session {{ d.session }} · {{ d.now }}</div>
       <div>Mode <span class="gold">{{ d.mode }}</span>
-        {% if d.can_enter %}<span class="pill ok">entries open</span>
+        {% if d.can_enter %}<span class="pill ok">entries open until {{ d.entry_cutoff }} CDT</span>
         {% elif d.premarket %}<span class="pill warn">premarket · scan only</span>
-        {% else %}<span class="pill">manage only</span>{% endif %}
+        {% else %}<span class="pill">manage only · after {{ d.entry_cutoff }} CDT</span>{% endif %}
       </div>
       <div>Equity {{ d.equity }} · cash {{ d.cash }} · HWM {{ d.high_water }}</div>
     </div>

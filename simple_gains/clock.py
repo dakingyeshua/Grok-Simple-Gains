@@ -1,4 +1,4 @@
-"""America/Chicago session calendar. Premarket is scan-only; entries end at 14:00."""
+"""America/Chicago session calendar. Premarket is scan-only; entries end at 11:00."""
 
 from __future__ import annotations
 
@@ -111,7 +111,7 @@ def is_regular_session(ts: datetime) -> bool:
 
 
 def can_enter_new(ts: datetime) -> bool:
-    """New paper entries: regular session, before 14:00 America/Chicago."""
+    """New paper entries: regular session, before 11:00 America/Chicago."""
     local = as_chicago(ts)
     d = local.date()
     if not is_session_day(d):

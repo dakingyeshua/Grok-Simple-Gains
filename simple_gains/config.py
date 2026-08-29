@@ -1,4 +1,8 @@
-"""Locked product rules. Weights and constitution numbers are v1 — do not change."""
+"""Locked product rules. Weights and constitution numbers are v1 — do not change.
+
+Constitution v1.1 locks the last NEW ENTRY cutoff at 11:00 America/Chicago.
+Do not change risk %, book caps, breakers, scoring weights, or the +1R floor.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +17,7 @@ PAPER_ONLY = True
 SESSION_TZ = "America/Chicago"
 PREMARKET_SCAN_START = time(3, 0)
 REGULAR_OPEN = time(9, 30)
-ENTRY_CUTOFF = time(14, 0)
+ENTRY_CUTOFF = time(11, 0)  # last NEW ENTRY; after this, trails/stops only
 REGULAR_CLOSE = time(15, 0)  # US cash close is 16:00 ET = 15:00 CT
 
 # First 15-minute candle of the system's regular session (9:30–9:45 CDT).

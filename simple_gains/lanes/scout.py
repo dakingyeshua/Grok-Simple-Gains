@@ -8,6 +8,7 @@ from decimal import Decimal
 from simple_gains.clock import can_enter_new, first_15m_complete, is_premarket, opening_range_end
 from simple_gains.config import (
     CLUSTER_MAX_OPEN,
+    ENTRY_CUTOFF,
     MAX_SPREAD_PCT,
     MIN_ADV_SHARES,
     MIN_PRICE,
@@ -92,13 +93,14 @@ class Scout:
             snap.on_watchlist,
             "on today's scan/watchlist" if snap.on_watchlist else "not on today's watchlist",
         )
+        cutoff_hm = ENTRY_CUTOFF.strftime("%H:%M")
         in_window = can_enter_new(now) and not is_premarket(now)
         add(
             FILTER_SESSION_WINDOW,
             in_window,
-            "regular session before 14:00 America/Chicago"
+            f"regular session before {cutoff_hm} America/Chicago"
             if in_window
-            else "outside new-entry window (premarket or after 14:00 CDT)",
+            else f"outside new-entry window (premarket or at/after {cutoff_hm} CDT)",
         )
         or_done = first_15m_complete(now, snap.session) and or_candle is not None
         add(

@@ -16,6 +16,7 @@ from simple_gains.broker.webull_stub import WebullStubBroker
 from simple_gains.clock import Clock, can_enter_new, is_premarket, is_session_day, session_date
 from simple_gains.config import (
     DEFAULT_SLIPPAGE_BPS,
+    ENTRY_CUTOFF,
     MODE_HITL,
     MODE_LIVE,
     MODE_PAPER,
@@ -295,7 +296,7 @@ class Engine:
         return result
 
     def manage_open(self, session: date | None = None) -> list[dict]:
-        """After 14:00 CDT this is the only path that may act on the book."""
+        """After 11:00 CDT this is the only path that may act on the book."""
         session = session or self.session()
         now = self.now()
         reports = []
@@ -445,6 +446,7 @@ class Engine:
             "now": self.now().isoformat(),
             "can_enter": can_enter_new(self.now()),
             "premarket": is_premarket(self.now()),
+            "entry_cutoff": ENTRY_CUTOFF.strftime("%H:%M"),
             "equity": str(equity),
             "cash": str(acct.cash),
             "high_water": str(acct.high_water),
