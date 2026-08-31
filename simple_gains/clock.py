@@ -1,7 +1,8 @@
-"""America/Chicago session calendar. Premarket is scan-only; entries end at 11:00.
+"""America/Chicago session calendar. Premarket is scan-only; entries end at 13:00.
 
 NYSE regular open/close are taken from America/New_York and converted to
 Chicago so a DST flip cannot silently move 9:30 ET onto 9:30 CT.
+Constitution v1.2: last hunt/scan 12:45 Chicago; last new entry 13:00 Chicago.
 """
 
 from __future__ import annotations
@@ -131,12 +132,21 @@ def is_regular_session(ts: datetime) -> bool:
 
 
 def can_enter_new(ts: datetime) -> bool:
-    """New paper entries: regular session, before 11:00 America/Chicago."""
+    """New paper entries: regular session, before 13:00 America/Chicago."""
     local = as_chicago(ts)
     d = local.date()
     if not is_session_day(d):
         return False
     return regular_open(d) <= local < entry_cutoff(d)
+
+
+def can_hunt(ts: datetime) -> bool:
+    """New hunt/scan names until 12:45 America/Chicago. Premarket hunt is allowed."""
+    local = as_chicago(ts)
+    d = local.date()
+    if not is_session_day(d):
+        return False
+    return local < hunt_cutoff(d)
 
 
 def can_place_order(ts: datetime) -> bool:

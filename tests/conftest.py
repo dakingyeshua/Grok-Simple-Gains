@@ -164,6 +164,7 @@ def make_snap(
     daily=None,
     ema=Decimal("183"),
     prior_low=Decimal("183.50"),
+    premarket_high=None,
 ) -> MarketSnapshot:
     five = five if five is not None else orb_five_min()
     daily = daily if daily is not None else daily_series(last)
@@ -190,6 +191,7 @@ def make_snap(
         qqq_session_ret=qqq_ret,
         spy_last_5m_red=spy_red,
         qqq_last_5m_red=qqq_red,
+        premarket_high=premarket_high,
     )
 
 

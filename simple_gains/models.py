@@ -103,6 +103,8 @@ class MarketSnapshot(BaseModel):
     qqq_last_5m_red: bool = False
     hitl_level_override: int | None = None
     hitl_catalyst_override: int | None = None
+    # Explicit premarket high (wicks included). None → derive from pre-open bars.
+    premarket_high: Decimal | None = None
 
 
 class FilterResult(BaseModel):
@@ -119,6 +121,8 @@ class ScoutVerdict(BaseModel):
     opening_range: Candle | None = None
     confirmation: Candle | None = None
     stretch_above_orh: Decimal | None = None
+    premarket_high: Decimal | None = None
+    trigger_level: Decimal | None = None
     reason: str = ""
 
     @property

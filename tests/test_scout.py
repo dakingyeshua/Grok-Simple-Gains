@@ -53,16 +53,18 @@ def test_premarket_never_orders():
     assert names["regular_session_before_cutoff"] is False
 
 
-def test_cutoff_11am_chicago_blocks_new_entries():
+def test_cutoff_1pm_chicago_blocks_new_entries():
     snap = make_snap()
     v = _scout(snap, entry_cutoff(SESSION))
     names = {f.name: f.passed for f in v.filters}
     assert names["regular_session_before_cutoff"] is False
-    assert "11:00" in next(f.detail for f in v.filters if f.name == "regular_session_before_cutoff")
-    v_ok = _scout(snap, chicago(10, 59))
+    assert "13:00" in next(f.detail for f in v.filters if f.name == "regular_session_before_cutoff")
+    v_ok = _scout(snap, chicago(12, 59))
     names_ok = {f.name: f.passed for f in v_ok.filters}
     assert names_ok["regular_session_before_cutoff"] is True
-    assert "11:00" in next(f.detail for f in v_ok.filters if f.name == "regular_session_before_cutoff")
+    assert "13:00" in next(f.detail for f in v_ok.filters if f.name == "regular_session_before_cutoff")
+    still_open_at_11 = _scout(snap, chicago(11, 0))
+    assert {f.name: f.passed for f in still_open_at_11.filters}["regular_session_before_cutoff"] is True
 
 
 def test_not_on_watchlist_fails():
@@ -87,3 +89,56 @@ def test_opening_range_complete_at_845_chicago():
     v = _scout(snap, done)
     names = {f.name: f.passed for f in v.filters}
     assert names["first_15m_complete"] is True
+
+
+def test_chase_uses_trigger_level_not_orh_alone():
+    """When PMH > ORH, 0.8×ADR chase is measured from max(PMH, ORH)."""
+    snap = make_snap(
+        last=Decimal("189.00"),
+        adr=Decimal("4.00"),
+        five=orb_five_min(or_high=Decimal("185"), trigger_close=Decimal("184.50"), trigger_low=Decimal("184.00")),
+        premarket_high=Decimal("190"),
+    )
+    v = _scout(snap, chicago(10, 5), confirm=None)
+    assert v.trigger_level == Decimal("190")
+    # 189 < 190 + 0.8*4 = 193.2, so not a chase vs trigger even though it would
+    # have been a chase vs ORH 185 + 3.2 = 188.2.
+    names = {f.name: f.passed for f in v.filters}
+    assert names["not_a_chase"] is True
+
+
+def test_merge_scout_universe_includes_top_gainers_uo_is_catalyst_only():
+    from simple_gains.config import SCOUT_UNIVERSE_CAP, SOURCE_TOP_GAINERS
+    from simple_gains.lanes.scout import merge_scout_universe
+
+    rows = merge_scout_universe(
+        {
+            "most_active": ["AAA", "BBB"],
+            "unusual_volume": ["CCC"],
+            "top_gainers": ["DDD", "AAA"],
+            "unusual_options": ["EEE", "AAA"],
+        }
+    )
+    tickers = [r.ticker for r in rows]
+    assert "DDD" in tickers
+    assert rows[tickers.index("DDD")].source == SOURCE_TOP_GAINERS
+    assert rows[tickers.index("DDD")].role == "hunt"
+    assert "EEE" not in tickers  # unusual options does not fill a hunt slot
+    assert "AAA" in tickers
+    assert tickers.count("AAA") == 1
+
+    overflow = merge_scout_universe(
+        {
+            "most_active": [f"M{i}" for i in range(8)],
+            "unusual_volume": [f"U{i}" for i in range(4)],
+            "top_gainers": [f"G{i}" for i in range(10)],
+            "unusual_options": ["OPT"],
+        }
+    )
+    assert len(overflow) == SCOUT_UNIVERSE_CAP
+    assert all(n.role == "hunt" for n in overflow)
+    assert "OPT" not in [n.ticker for n in overflow]
+    # 8 MA + 4 UV = 12; remaining hunt slots come from Top Gainers.
+    hunt_sources = {n.source for n in overflow}
+    assert SOURCE_TOP_GAINERS in hunt_sources
+    assert sum(1 for n in overflow if n.source == SOURCE_TOP_GAINERS) == 3

@@ -62,12 +62,12 @@ simple-gains serve
 
 1. **Scan** (premarket context from ~3:00 AM CDT) → watchlist. No orders.
 2. **Watchlist** names sit until the first 15-minute regular-session candle is complete (**8:45 AM** CDT).
-3. **Trigger** is a 5-minute candle that **closes** above that first 15-minute high. Wicks do not count.
+3. **Trigger** is a 5-minute candle that **closes** above **max(premarket high, first 15-minute high)**. Wicks through the level without a close do not count. The confirming bar’s upper wick must be **≤ 5%** of that bar’s own range; a doji (high == low) fails.
 4. **Grader** scores Scout survivors only (100-point model).
 5. **Risk Officer** sizes, gates, or vetoes. A veto is final for that ticker that day.
 6. **Paper fill** (or HITL alert) at the 5-minute close. Full size. One ticker, one ticket.
 7. **Journal** records signal / skip / fill / stop / trail / breaker / veto.
-8. After **11:00 AM CDT**, only manage open paper positions (trail / stop-out).
+8. After **1:00 PM** America/Chicago (**13:00**), only manage open paper positions (trail / stop-out).
 
 Useful commands:
 
@@ -106,14 +106,14 @@ Copy `.env.example` to `.env` if you want these loaded automatically.
 
 ## Session clock
 
-Desk times are **America/Chicago**. NYSE cash hours are **9:30–16:00 America/New_York** and are converted (never treat 9:30 as a Chicago wall time).
+Desk times are **America/Chicago**. NYSE cash hours are **9:30–16:00 America/New_York** and are converted (never treat 9:30 as a Chicago wall time). Constitution **v1.2** (locked 2026-08-31).
 
 - Premarket ~**3:00 AM** CDT: scan and context only. **Never orders.**
 - Regular open: **8:30 AM** America/Chicago (**9:30 ET**). Regular close: **3:00 PM** CDT (**16:00 ET**).
 - First 15-minute candle: **8:30–8:45** America/Chicago. That bar **is** the opening range. First ORB-eligible 5-minute close is **8:45 AM** CDT.
-- Hunt/scan cutoff: **10:45 AM** CDT.
-- New entries: **8:30 AM–11:00 AM** CDT. Last new entry is **11:00 AM** CDT.
-- After **11:00 AM CDT**: manage open paper positions only (mechanical trail). No new entries.
+- Hunt/scan cutoff: **12:45 PM** CDT. After that the watchlist is frozen; no new names.
+- New entries: **8:30 AM–1:00 PM** America/Chicago. Last new entry is **1:00 PM** (**13:00**) Chicago.
+- After **1:00 PM** Chicago: manage open paper positions only (mechanical trail). No new entries.
 
 ---
 
@@ -131,12 +131,23 @@ Patterns of interest (heuristic + HITL override fields on the Grader card): Inve
 ## Hard pre-filters (fail any one = out, never scored)
 
 1. On today’s scan / watchlist
-2. Regular session before 11:00 AM CDT
+2. Regular session before 1:00 PM America/Chicago
 3. First 15-minute candle complete
 4. Liquid enough (see below)
 5. Not halted
 6. Cluster slot still open (max **4** concurrent open names; one ticker, one full-size ticket)
-7. Not a chase: fail if last price is already **≥ 0.8 × ADR** above the 15-minute high **before** any 5-minute confirmation close
+7. Not a chase: fail if last price is already **≥ 0.8 × ADR** above the **trigger level** (**max(premarket high, first 15-minute high)**) **before** any 5-minute confirmation close
+
+### ORB trigger (hard pre-filter, not Grader points)
+
+- Level = **max(premarket high, first 15-minute regular-session high)**. Both highs **include wicks**.
+- Pass only if a 5-minute bar **closes** strictly above that level. A wick through the level without a close above is a fail.
+- The confirming 5-minute bar’s upper wick must be **≤ 5%** of that bar’s own range: `(high − close) / (high − low) ≤ 0.05`. If high == low (doji), fail.
+- First 15-minute bar still completes at **8:45 AM** CDT. Premarket orders remain forbidden.
+
+### Scout universe (cap ~15)
+
+Hunt **Most Active**, **Unusual Volume**, and **Top Gainers**. **Unusual Options** is catalyst/watchlist only — it does not fill a hunt slot. Keep the liquidity / halt / chase hard filters above.
 
 ### Liquidity (documented v1)
 
@@ -170,7 +181,7 @@ Do not change these weights.
 
 S-tier must be rare. The engine **flags** (does not auto-veto) if three S names print in a session.
 
-The **5-minute close** is the trigger, not the score. Volume / RS / EMA / OR-quality buckets are mechanical from data. Pattern and catalyst may use heuristics plus HITL override fields (`hitl_level_override`, `hitl_catalyst_override`).
+The **5-minute close above max(PMH, ORH)** is the trigger, not the score. Volume / RS / EMA / OR-quality buckets are mechanical from data. Pattern and catalyst may use heuristics plus HITL override fields (`hitl_level_override`, `hitl_catalyst_override`).
 
 Every stored card has: ticker, date, session, pre-filter pass list, six bucket scores, total, tier, mapped risk %, theme/sector, SPY/QQQ headwind note, decision (`S` / `A+` / `A` / `skip`).
 

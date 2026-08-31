@@ -45,6 +45,12 @@ def main() -> None:
     payload = {
         "session": SESSION.isoformat(),
         "watchlist": ["AAPL", "NVDA", "TSLA", "MSFT"],
+        "sources": {
+            "most_active": ["AAPL", "NVDA"],
+            "unusual_volume": ["TSLA"],
+            "top_gainers": ["MSFT"],
+            "unusual_options": ["AAPL"],
+        },
         "index": {
             "spy_session_ret": "0.0015",
             "qqq_session_ret": "0.0020",
