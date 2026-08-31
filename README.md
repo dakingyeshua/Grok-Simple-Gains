@@ -61,7 +61,7 @@ simple-gains serve
 ### Daily flow
 
 1. **Scan** (premarket context from ~3:00 AM CDT) → watchlist. No orders.
-2. **Watchlist** names sit until the first 15-minute regular-session candle is complete.
+2. **Watchlist** names sit until the first 15-minute regular-session candle is complete (**8:45 AM** CDT).
 3. **Trigger** is a 5-minute candle that **closes** above that first 15-minute high. Wicks do not count.
 4. **Grader** scores Scout survivors only (100-point model).
 5. **Risk Officer** sizes, gates, or vetoes. A veto is final for that ticker that day.
@@ -106,15 +106,14 @@ Copy `.env.example` to `.env` if you want these loaded automatically.
 
 ## Session clock
 
-All product times are **America/Chicago** (CST/CDT).
+Desk times are **America/Chicago**. NYSE cash hours are **9:30–16:00 America/New_York** and are converted (never treat 9:30 as a Chicago wall time).
 
 - Premarket ~**3:00 AM** CDT: scan and context only. **Never orders.**
-- Regular session / new entries: **9:30 AM–11:00 AM CDT**.
-- First 15-minute candle: **9:30–9:45** America/Chicago. That bar **is** the opening range.
+- Regular open: **8:30 AM** America/Chicago (**9:30 ET**). Regular close: **3:00 PM** CDT (**16:00 ET**).
+- First 15-minute candle: **8:30–8:45** America/Chicago. That bar **is** the opening range. First ORB-eligible 5-minute close is **8:45 AM** CDT.
+- Hunt/scan cutoff: **10:45 AM** CDT.
+- New entries: **8:30 AM–11:00 AM** CDT. Last new entry is **11:00 AM** CDT.
 - After **11:00 AM CDT**: manage open paper positions only (mechanical trail). No new entries.
-- US cash close used for bar filtering: **3:00 PM CDT** (4:00 PM ET).
-
-This is Aaron’s specified Chicago clock, not a silent conversion to 9:30 ET.
 
 ---
 

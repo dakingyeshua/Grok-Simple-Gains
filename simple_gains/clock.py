@@ -1,4 +1,8 @@
-"""America/Chicago session calendar. Premarket is scan-only; entries end at 11:00."""
+"""America/Chicago session calendar. Premarket is scan-only; entries end at 11:00.
+
+NYSE regular open/close are taken from America/New_York and converted to
+Chicago so a DST flip cannot silently move 9:30 ET onto 9:30 CT.
+"""
 
 from __future__ import annotations
 
@@ -8,13 +12,17 @@ from zoneinfo import ZoneInfo
 
 from simple_gains.config import (
     ENTRY_CUTOFF,
+    EXCHANGE_TZ,
+    HUNT_CUTOFF,
+    NYSE_REGULAR_CLOSE,
+    NYSE_REGULAR_OPEN,
+    OPENING_RANGE_MINUTES,
     PREMARKET_SCAN_START,
-    REGULAR_CLOSE,
-    REGULAR_OPEN,
     SESSION_TZ,
 )
 
 CHICAGO = ZoneInfo(SESSION_TZ)
+NEW_YORK = ZoneInfo(EXCHANGE_TZ)
 
 # Observed US equity holidays (NYSE) used to skip session days.
 # Extend as needed; weekends are always closed.
@@ -78,16 +86,27 @@ def combine(d: date, t: time) -> datetime:
     return datetime.combine(d, t, tzinfo=CHICAGO)
 
 
+def _nyse_to_chicago(d: date, t: time) -> datetime:
+    """NYSE wall time on session date `d`, expressed in America/Chicago."""
+    return datetime.combine(d, t, tzinfo=NEW_YORK).astimezone(CHICAGO)
+
+
 def regular_open(d: date) -> datetime:
-    return combine(d, REGULAR_OPEN)
+    """NYSE 9:30 ET → 8:30 America/Chicago on US trading days."""
+    return _nyse_to_chicago(d, NYSE_REGULAR_OPEN)
 
 
 def entry_cutoff(d: date) -> datetime:
     return combine(d, ENTRY_CUTOFF)
 
 
+def hunt_cutoff(d: date) -> datetime:
+    return combine(d, HUNT_CUTOFF)
+
+
 def regular_close(d: date) -> datetime:
-    return combine(d, REGULAR_CLOSE)
+    """NYSE 16:00 ET → 15:00 America/Chicago."""
+    return _nyse_to_chicago(d, NYSE_REGULAR_CLOSE)
 
 
 def premarket_scan_start(d: date) -> datetime:
@@ -95,7 +114,8 @@ def premarket_scan_start(d: date) -> datetime:
 
 
 def opening_range_end(d: date) -> datetime:
-    return regular_open(d) + timedelta(minutes=15)
+    """First 15-minute candle completes; first ORB-eligible 5-minute bar starts."""
+    return regular_open(d) + timedelta(minutes=OPENING_RANGE_MINUTES)
 
 
 def is_premarket(ts: datetime) -> bool:

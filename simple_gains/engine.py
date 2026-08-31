@@ -13,7 +13,15 @@ from simple_gains.broker.base import Broker, LiveTradingDisabled
 from simple_gains.broker.hitl import HITLBroker
 from simple_gains.broker.paper import PaperBroker
 from simple_gains.broker.webull_stub import WebullStubBroker
-from simple_gains.clock import Clock, can_enter_new, is_premarket, is_session_day, session_date
+from simple_gains.clock import (
+    Clock,
+    as_chicago,
+    can_enter_new,
+    is_premarket,
+    is_session_day,
+    opening_range_end,
+    session_date,
+)
 from simple_gains.config import (
     DEFAULT_SLIPPAGE_BPS,
     ENTRY_CUTOFF,
@@ -129,8 +137,12 @@ class Engine:
     def _confirmation(self, snap: MarketSnapshot, orh: Decimal) -> Candle | None:
         if not snap.five_min:
             return None
+        # Skip bars inside the opening range. First ORB-eligible 5-minute
+        # close is the bar that opens when the first 15-minute candle completes
+        # (8:45 America/Chicago = 9:45 ET).
+        or_end = opening_range_end(snap.session)
         for bar in snap.five_min:
-            if bar.ts.hour == 9 and bar.ts.minute < 45:
+            if as_chicago(bar.ts) < or_end:
                 continue
             if confirmation_closes_above_orh(bar, orh):
                 return bar

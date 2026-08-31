@@ -1,6 +1,8 @@
 """Locked product rules. Weights and constitution numbers are v1 — do not change.
 
 Constitution v1.1 locks the last NEW ENTRY cutoff at 11:00 America/Chicago.
+NYSE regular session is 9:30–16:00 America/New_York. Convert that to
+America/Chicago (8:30–15:00). Never treat 9:30 as a Chicago wall time.
 Do not change risk %, book caps, breakers, scoring weights, or the +1R floor.
 """
 
@@ -13,14 +15,25 @@ from decimal import Decimal
 PHILOSOPHY = "Quality over quantity. Consistent gains over greedy wins."
 PAPER_ONLY = True
 
-# --- Session clock (all product times are America/Chicago) ---
+# --- Session clock ---
+# Product desk times are America/Chicago. NYSE cash hours live in
+# America/New_York and must be converted — DST must not shift the window.
 SESSION_TZ = "America/Chicago"
-PREMARKET_SCAN_START = time(3, 0)
-REGULAR_OPEN = time(9, 30)
-ENTRY_CUTOFF = time(11, 0)  # last NEW ENTRY; after this, trails/stops only
-REGULAR_CLOSE = time(15, 0)  # US cash close is 16:00 ET = 15:00 CT
+EXCHANGE_TZ = "America/New_York"
 
-# First 15-minute candle of the system's regular session (9:30–9:45 CDT).
+NYSE_REGULAR_OPEN = time(9, 30)   # 9:30 ET → 8:30 CT
+NYSE_REGULAR_CLOSE = time(16, 0)  # 16:00 ET → 15:00 CT
+
+# Locked desk times in America/Chicago (not converted from Eastern).
+PREMARKET_SCAN_START = time(3, 0)
+HUNT_CUTOFF = time(10, 45)  # hunt/scan cutoff
+ENTRY_CUTOFF = time(11, 0)  # last NEW ENTRY; after this, trails/stops only
+
+# Chicago wall times that must equal the NYSE conversion every session day.
+REGULAR_OPEN = time(8, 30)
+REGULAR_CLOSE = time(15, 0)
+
+# First 15-minute candle of regular session: 8:30–8:45 America/Chicago.
 OPENING_RANGE_MINUTES = 15
 TRIGGER_TIMEFRAME_MINUTES = 5
 

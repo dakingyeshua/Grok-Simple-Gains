@@ -157,10 +157,10 @@ def make_orb_bars(
     trigger_low: Decimal,
     later: list[tuple[Decimal, Decimal, Decimal, Decimal]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Helper used by tests to synthesize a 9:30 CDT OR + 5-minute trigger."""
+    """Helper used by tests to synthesize an 8:30 CT OR + 5-minute trigger."""
     start = regular_open(session)
     bars = []
-    # three 5-minute bars composing the opening range
+    # three 5-minute bars composing the opening range (8:30–8:45 CT)
     pieces = [
         (or_open, or_high, (or_open + or_low) / 2, (or_open + or_high) / 2),
         ((or_open + or_high) / 2, or_high, or_low, (or_high + or_low) / 2),
@@ -169,7 +169,7 @@ def make_orb_bars(
     for i, (o, h, l, c) in enumerate(pieces):
         ts = start + __import__("datetime").timedelta(minutes=5 * i)
         bars.append(_bar(ts, o, h, l, c, 400_000 + i * 10_000))
-    # confirmation 09:45–09:50
+    # confirmation 08:45–08:50 CT (first ORB-eligible 5-minute bar)
     trig_ts = start + __import__("datetime").timedelta(minutes=15)
     bars.append(_bar(trig_ts, or_high, trigger_close, trigger_low, trigger_close, 800_000))
     cursor = start + __import__("datetime").timedelta(minutes=20)
