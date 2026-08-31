@@ -5,10 +5,12 @@ from simple_gains.broker.base import LiveTradingDisabled
 from simple_gains.broker.webull_stub import WebullStubBroker
 from simple_gains.clock import (
     Clock,
+    as_chicago,
     can_enter_new,
     can_place_order,
     entry_cutoff,
     is_premarket,
+    opening_range_end,
     premarket_scan_start,
     regular_open,
 )
@@ -28,7 +30,10 @@ def test_premarket_is_scan_only_never_orders():
 
 def test_entries_open_after_regular_open_before_11am():
     assert ENTRY_CUTOFF.hour == 11 and ENTRY_CUTOFF.minute == 0
+    assert regular_open(SESSION).hour == 8 and regular_open(SESSION).minute == 30
+    assert not can_enter_new(chicago(8, 29))
     assert can_enter_new(regular_open(SESSION))
+    assert can_enter_new(chicago(8, 30))
     assert can_enter_new(chicago(10, 59))
     assert not can_enter_new(entry_cutoff(SESSION))
     assert not can_enter_new(chicago(11, 0))
@@ -67,6 +72,23 @@ def _paper_engine(store, hour: int, minute: int, *, confirm_hour: int | None = N
     clock = Clock()
     clock.freeze(chicago(hour, minute))
     return Engine(store, broker, data, clock)
+
+
+def test_confirmation_ignores_bars_inside_opening_range(store):
+    """First ORB-eligible 5-minute close is 8:45 CT, not a bar inside 8:30–8:45."""
+    from simple_gains.lanes.scout import opening_range_candle
+
+    eng = _paper_engine(store, 10, 0)
+    snap = eng._snapshot("AAPL", SESSION)
+    or_bar = opening_range_candle(snap.five_min, SESSION)
+    assert or_bar is not None
+    confirm = eng._confirmation(snap, or_bar.high)
+    assert confirm is not None
+    assert confirm.ts == opening_range_end(SESSION)
+    assert confirm.ts.hour == 8 and confirm.ts.minute == 45
+    for bar in snap.five_min:
+        if as_chicago(bar.ts) < opening_range_end(SESSION):
+            assert bar.ts != confirm.ts
 
 
 def test_five_minute_confirmation_at_1059_cdt_can_still_paper_fill(store):

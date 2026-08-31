@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from simple_gains.clock import entry_cutoff, premarket_scan_start, regular_open
+from simple_gains.clock import entry_cutoff, opening_range_end, premarket_scan_start, regular_open
 from simple_gains.config import STRETCH_ADR_MULTIPLE
 from simple_gains.lanes.scout import Scout, confirmation_closes_above_orh, is_chase
 from tests.conftest import SESSION, chicago, make_snap, orb_five_min
@@ -77,3 +77,13 @@ def test_opening_range_must_be_complete():
     v = _scout(snap, regular_open(SESSION).replace(minute=40))
     names = {f.name: f.passed for f in v.filters}
     assert names["first_15m_complete"] is False
+    assert regular_open(SESSION).hour == 8 and regular_open(SESSION).minute == 30
+
+
+def test_opening_range_complete_at_845_chicago():
+    snap = make_snap()
+    done = opening_range_end(SESSION)
+    assert done.hour == 8 and done.minute == 45
+    v = _scout(snap, done)
+    names = {f.name: f.passed for f in v.filters}
+    assert names["first_15m_complete"] is True
