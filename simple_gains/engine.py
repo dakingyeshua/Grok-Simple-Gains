@@ -17,6 +17,7 @@ from simple_gains.clock import (
     Clock,
     as_chicago,
     can_enter_new,
+    can_hunt,
     is_premarket,
     is_session_day,
     opening_range_end,
@@ -25,10 +26,13 @@ from simple_gains.clock import (
 from simple_gains.config import (
     DEFAULT_SLIPPAGE_BPS,
     ENTRY_CUTOFF,
+    HUNT_CUTOFF,
+    HUNT_SOURCES,
     MODE_HITL,
     MODE_LIVE,
     MODE_PAPER,
     S_TIER_FLAG_COUNT,
+    SCOUT_UNIVERSE_CAP,
     STARTING_EQUITY,
     VALID_MODES,
 )
@@ -38,7 +42,14 @@ from simple_gains.data.fixtures import FixtureData
 from simple_gains.lanes.grader import Grader
 from simple_gains.lanes.journal import Journal
 from simple_gains.lanes.risk import RiskOfficer, next_stop
-from simple_gains.lanes.scout import Scout, confirmation_closes_above_orh
+from simple_gains.lanes.scout import (
+    Scout,
+    confirmation_closes_above_level,
+    merge_scout_universe,
+    opening_range_candle,
+    orb_trigger_level,
+    resolve_premarket_high,
+)
 from simple_gains.models import (
     Candle,
     Decision,
@@ -106,45 +117,91 @@ class Engine:
     def session(self) -> date:
         return session_date(self.now())
 
-    def scan(self, tickers: list[str] | None = None, session: date | None = None) -> list[dict[str, str]]:
-        """Premarket / any-time hunt. Scout does not score. Watchlist only."""
+    def scan(
+        self,
+        tickers: list[str] | None = None,
+        session: date | None = None,
+        sources: dict[str, list[str]] | None = None,
+    ) -> list[dict[str, str]]:
+        """Premarket / hunt → watchlist. Scout does not score. No orders.
+
+        After the 12:45 Chicago hunt cutoff the watchlist is frozen; no new names.
+        Hunt sources: Most Active, Unusual Volume, Top Gainers (cap ~15).
+        Unusual Options is catalyst/watchlist only.
+        """
         session = session or self.session()
-        if isinstance(self.data, FixtureData):
-            rows = self.data.watchlist_meta()
-            tickers = [r[0] for r in rows]
+        now = self.now()
+        if not can_hunt(now):
+            existing = self.store.watchlist(session)
+            self.journal.record(
+                JournalKind.SCAN,
+                now,
+                session,
+                payload={
+                    "tickers": [r["ticker"] for r in existing],
+                    "note": f"hunt cutoff {HUNT_CUTOFF.strftime('%H:%M')} America/Chicago — watchlist frozen, no new names",
+                },
+            )
+            return existing
+
+        if tickers:
+            tickers = [t.upper() for t in tickers]
+            rows = self._profile_rows(tickers, note="scan")
         else:
-            tickers = [t.upper() for t in (tickers or DEFAULT_UNIVERSE)]
-            rows = []
-            for t in tickers:
-                try:
-                    prof = self.data.profile(t)
-                    rows.append((t, prof.theme, prof.sector, "scan"))
-                except Exception as exc:  # pragma: no cover - network
-                    rows.append((t, "other", "other", f"profile_error:{exc}"))
+            source_lists = sources if sources is not None else self.data.source_lists()
+            if any(source_lists.get(k) for k in HUNT_SOURCES):
+                merged = merge_scout_universe(source_lists, cap=SCOUT_UNIVERSE_CAP)
+                rows = []
+                for item in merged:
+                    if item.ticker in {"SPY", "QQQ"}:
+                        continue
+                    rows.extend(self._profile_rows([item.ticker], note=f"{item.source} · {item.role}"))
+            elif isinstance(self.data, FixtureData):
+                rows = self.data.watchlist_meta()
+            else:
+                rows = self._profile_rows(list(DEFAULT_UNIVERSE), note="scan")
+        tickers = [r[0] for r in rows]
         self.store.set_watchlist(session, rows)
         self.journal.record(
             JournalKind.SCAN,
-            self.now(),
+            now,
             session,
             payload={"tickers": tickers, "note": "premarket scan/context — no orders"},
         )
         return self.store.watchlist(session)
 
+    def _profile_rows(self, tickers: list[str], note: str) -> list[tuple[str, str, str, str]]:
+        rows: list[tuple[str, str, str, str]] = []
+        for t in tickers:
+            try:
+                if isinstance(self.data, FixtureData) and t not in self.data.raw.get("names", {}):
+                    rows.append((t, "other", "other", note))
+                    continue
+                prof = self.data.profile(t)
+                extra = ""
+                if isinstance(self.data, FixtureData) and t in self.data.raw.get("names", {}):
+                    extra = self.data._name(t).get("catalyst_note", "") or ""
+                detail = f"{note} · {extra}".strip(" ·") if extra else note
+                rows.append((t, prof.theme, prof.sector, detail))
+            except Exception as exc:  # pragma: no cover - network
+                rows.append((t, "other", "other", f"{note}:profile_error:{exc}"))
+        return rows
+
     def _snapshot(self, ticker: str, session: date) -> MarketSnapshot:
         on_wl = self.store.on_watchlist(session, ticker)
         return self.data.snapshot(ticker, session, on_watchlist=on_wl)
 
-    def _confirmation(self, snap: MarketSnapshot, orh: Decimal) -> Candle | None:
+    def _confirmation(self, snap: MarketSnapshot, level: Decimal) -> Candle | None:
         if not snap.five_min:
             return None
         # Skip bars inside the opening range. First ORB-eligible 5-minute
         # close is the bar that opens when the first 15-minute candle completes
-        # (8:45 America/Chicago = 9:45 ET).
+        # (8:45 America/Chicago = 9:45 ET). Level is max(PMH, ORH).
         or_end = opening_range_end(snap.session)
         for bar in snap.five_min:
             if as_chicago(bar.ts) < or_end:
                 continue
-            if confirmation_closes_above_orh(bar, orh):
+            if confirmation_closes_above_level(bar, level):
                 return bar
         return None
 
@@ -159,15 +216,13 @@ class Engine:
             return result
 
         snap = self._snapshot(ticker, session)
-        or_high = None
-        from simple_gains.lanes.scout import opening_range_candle
-
         or_bar = opening_range_candle(snap.five_min, session)
         if or_bar is None and snap.fifteen_min:
             or_bar = snap.fifteen_min[0]
-        if or_bar:
-            or_high = or_bar.high
-        confirm = self._confirmation(snap, or_high) if or_high is not None else None
+        or_high = or_bar.high if or_bar else None
+        pmh = resolve_premarket_high(snap)
+        level = orb_trigger_level(pmh, or_high) if or_high is not None else None
+        confirm = self._confirmation(snap, level) if level is not None else None
 
         open_pos = self.broker.positions()
         verdict = self.scout.evaluate(
@@ -185,7 +240,7 @@ class Engine:
             return result
 
         if confirm is None or verdict.opening_range is None:
-            self.journal.skip(now, session, ticker, "no_5m_close_above_orh")
+            self.journal.skip(now, session, ticker, "no_5m_close_above_trigger")
             result["decision"] = "waiting_trigger"
             return result
 
@@ -202,7 +257,16 @@ class Engine:
 
         card = self.grader.score(snap, verdict, s_tier_already=breakers.s_tier_count)
         self.store.save_card(card)
-        self.journal.signal(now, card, extra={"orh": str(verdict.opening_range.high), "trigger": str(confirm.close)})
+        self.journal.signal(
+            now,
+            card,
+            extra={
+                "orh": str(verdict.opening_range.high),
+                "pmh": str(verdict.premarket_high) if verdict.premarket_high is not None else None,
+                "trigger_level": str(verdict.trigger_level) if verdict.trigger_level is not None else None,
+                "trigger": str(confirm.close),
+            },
+        )
         result["card"] = card.model_dump(mode="json")
 
         if card.tier == "S":
@@ -258,7 +322,7 @@ class Engine:
             risk_pct=card.mapped_risk_pct,
             grader_total=card.total,
             tier=card.tier,
-            reason="orb_5m_close_above_orh",
+            reason="orb_5m_close_above_trigger",
         )
         fill = self.broker.place_market_buy(ticket, confirm.ts, decision.planned_entry)
         if fill.shares == 0 and fill.note == "hitl_alert_no_fill":
@@ -308,7 +372,7 @@ class Engine:
         return result
 
     def manage_open(self, session: date | None = None) -> list[dict]:
-        """After 11:00 CDT this is the only path that may act on the book."""
+        """After 13:00 America/Chicago this is the only path that may act on the book."""
         session = session or self.session()
         now = self.now()
         reports = []
@@ -458,7 +522,9 @@ class Engine:
             "now": self.now().isoformat(),
             "can_enter": can_enter_new(self.now()),
             "premarket": is_premarket(self.now()),
+            "can_hunt": can_hunt(self.now()),
             "entry_cutoff": ENTRY_CUTOFF.strftime("%H:%M"),
+            "hunt_cutoff": HUNT_CUTOFF.strftime("%H:%M"),
             "equity": str(equity),
             "cash": str(acct.cash),
             "high_water": str(acct.high_water),

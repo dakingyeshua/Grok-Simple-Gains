@@ -253,4 +253,8 @@ class Grader:
             parts.append(snap.catalyst_note)
         if scout.opening_range:
             parts.append(f"ORH {scout.opening_range.high}")
+        if scout.premarket_high is not None:
+            parts.append(f"PMH {scout.premarket_high}")
+        if scout.trigger_level is not None:
+            parts.append(f"trigger {scout.trigger_level}")
         return " | ".join(parts)

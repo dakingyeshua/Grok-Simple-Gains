@@ -128,19 +128,49 @@ class FixtureData(MarketData):
             qqq_last_5m_red=tape["qqq_last_5m_red"],  # type: ignore[arg-type]
             hitl_level_override=raw.get("hitl_level_override"),
             hitl_catalyst_override=raw.get("hitl_catalyst_override"),
+            premarket_high=_D(raw["premarket_high"]) if raw.get("premarket_high") is not None else None,
         )
 
     def watchlist_tickers(self) -> list[str]:
         return list(self.raw.get("watchlist", self.raw["names"].keys()))
 
+    def source_lists(self) -> dict[str, list[str]]:
+        """Fixture scout sources. Flat `watchlist` is treated as most_active."""
+        from simple_gains.config import (
+            SOURCE_MOST_ACTIVE,
+            SOURCE_TOP_GAINERS,
+            SOURCE_UNUSUAL_OPTIONS,
+            SOURCE_UNUSUAL_VOLUME,
+        )
+
+        raw = self.raw.get("sources")
+        if isinstance(raw, dict):
+            return {str(k): [str(t).upper() for t in (v or [])] for k, v in raw.items()}
+        return {
+            SOURCE_MOST_ACTIVE: [t.upper() for t in self.watchlist_tickers()],
+            SOURCE_UNUSUAL_VOLUME: [],
+            SOURCE_TOP_GAINERS: [],
+            SOURCE_UNUSUAL_OPTIONS: [],
+        }
+
     def watchlist_meta(self) -> list[tuple[str, str, str, str]]:
+        from simple_gains.lanes.scout import merge_scout_universe
+
         rows = []
-        for t in self.watchlist_tickers():
-            if t.upper() in {"SPY", "QQQ"}:
+        for item in merge_scout_universe(self.source_lists()):
+            t = item.ticker
+            if t in {"SPY", "QQQ"}:
                 continue
-            p = self.profile(t)
-            note = self._name(t).get("catalyst_note", "")
-            rows.append((t.upper(), p.theme, p.sector, note))
+            if t in self.raw.get("names", {}):
+                p = self.profile(t)
+                cat = self._name(t).get("catalyst_note", "")
+            else:
+                p = Profile(ticker=t, exchange="", sector="other", theme="other")
+                cat = ""
+            note_bits = [item.source, item.role]
+            if cat:
+                note_bits.append(cat)
+            rows.append((t, p.theme, p.sector, " · ".join(note_bits)))
         return rows
 
 

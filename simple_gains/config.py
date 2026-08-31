@@ -1,9 +1,14 @@
 """Locked product rules. Weights and constitution numbers are v1 — do not change.
 
-Constitution v1.1 locks the last NEW ENTRY cutoff at 11:00 America/Chicago.
-NYSE regular session is 9:30–16:00 America/New_York. Convert that to
-America/Chicago (8:30–15:00). Never treat 9:30 as a Chicago wall time.
-Do not change risk %, book caps, breakers, scoring weights, or the +1R floor.
+Constitution v1.2 (locked 2026-08-31) last NEW ENTRY cutoff is 13:00 America/Chicago.
+Hunt/scan cutoff is 12:45 Chicago. NYSE regular session is 9:30–16:00
+America/New_York, converted to America/Chicago (8:30–15:00). Never treat
+9:30 as a Chicago wall time. ORB trigger level is max(premarket high,
+first 15-minute high); a 5-minute bar must close above that level with
+an upper wick ≤ 5% of its own range.
+
+Do not change risk %, 85-bar skip, 6% book cap, 2-theme cap, breakers,
+scoring weights, or the +1R floor.
 """
 
 from __future__ import annotations
@@ -26,8 +31,8 @@ NYSE_REGULAR_CLOSE = time(16, 0)  # 16:00 ET → 15:00 CT
 
 # Locked desk times in America/Chicago (not converted from Eastern).
 PREMARKET_SCAN_START = time(3, 0)
-HUNT_CUTOFF = time(10, 45)  # hunt/scan cutoff
-ENTRY_CUTOFF = time(11, 0)  # last NEW ENTRY; after this, trails/stops only
+HUNT_CUTOFF = time(12, 45)  # last hunt/scan; after this, watchlist is frozen
+ENTRY_CUTOFF = time(13, 0)  # last NEW ENTRY (1:00 PM CT); after this, manage only
 
 # Chicago wall times that must equal the NYSE conversion every session day.
 REGULAR_OPEN = time(8, 30)
@@ -42,9 +47,23 @@ MIN_PRICE = Decimal("5.00")
 MIN_ADV_SHARES = 1_000_000
 MAX_SPREAD_PCT = Decimal("0.50")  # 0.50% of mid
 
-# Chase / stretch: fail if last <= confirmation and price already
-# >= 0.8 × ADR above the first 15-minute high.
+# ORB trigger (hard pre-filter, not Grader points). Level = max(PMH, ORH).
+# Confirming 5-minute bar: close strictly above the level, and
+# (high - close) / (high - low) ≤ 5%. Doji (high == low) fails.
+CONFIRM_UPPER_WICK_MAX = Decimal("0.05")
+
+# Chase / stretch: fail if last is already ≥ 0.8 × ADR above the trigger level
+# (max of premarket high and first 15-minute high) before confirmation.
 STRETCH_ADR_MULTIPLE = Decimal("0.8")
+
+# Scout hunt universe. Unusual Options is catalyst/watchlist only.
+SCOUT_UNIVERSE_CAP = 15
+SOURCE_MOST_ACTIVE = "most_active"
+SOURCE_UNUSUAL_VOLUME = "unusual_volume"
+SOURCE_TOP_GAINERS = "top_gainers"
+SOURCE_UNUSUAL_OPTIONS = "unusual_options"
+HUNT_SOURCES = (SOURCE_MOST_ACTIVE, SOURCE_UNUSUAL_VOLUME, SOURCE_TOP_GAINERS)
+CATALYST_ONLY_SOURCES = (SOURCE_UNUSUAL_OPTIONS,)
 
 # Cluster: max concurrent open names. One ticker, one full-size ticket.
 CLUSTER_MAX_OPEN = 4

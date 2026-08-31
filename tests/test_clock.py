@@ -1,8 +1,9 @@
-"""Session clock vs locked Risk Constitution v1.1.
+"""Session clock vs locked Risk Constitution v1.2.
 
 NYSE regular hours are 9:30–16:00 America/New_York. Product desk times are
 America/Chicago. Cover both CDT (UTC−5) and CST (UTC−6) so a DST flip cannot
-silently move 9:30 ET onto 9:30 Chicago.
+silently move 9:30 ET onto 9:30 Chicago. Entry cutoff is 13:00 Chicago;
+hunt/scan cutoff is 12:45 Chicago.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from simple_gains.clock import (
     CHICAGO,
     NEW_YORK,
     can_enter_new,
+    can_hunt,
     can_place_order,
     entry_cutoff,
     first_15m_complete,
@@ -98,11 +100,14 @@ def test_opening_range_completes_at_845_chicago(session: date, utc_offset_hours:
 
 @pytest.mark.parametrize("session", [CST_DAY, CDT_DAY], ids=["CST", "CDT"])
 def test_entry_and_hunt_cutoffs_are_chicago_wall_times(session: date) -> None:
-    assert ENTRY_CUTOFF == time(11, 0)
-    assert HUNT_CUTOFF == time(10, 45)
-    assert entry_cutoff(session) == datetime.combine(session, time(11, 0), tzinfo=CHICAGO)
-    assert hunt_cutoff(session) == datetime.combine(session, time(10, 45), tzinfo=CHICAGO)
+    assert ENTRY_CUTOFF == time(13, 0)
+    assert HUNT_CUTOFF == time(12, 45)
+    assert entry_cutoff(session) == datetime.combine(session, time(13, 0), tzinfo=CHICAGO)
+    assert hunt_cutoff(session) == datetime.combine(session, time(12, 45), tzinfo=CHICAGO)
     assert hunt_cutoff(session) < entry_cutoff(session)
+    assert can_hunt(hunt_cutoff(session) - timedelta(minutes=1))
+    assert not can_hunt(hunt_cutoff(session))
+    assert not can_hunt(entry_cutoff(session))
 
 
 @pytest.mark.parametrize(
@@ -146,4 +151,8 @@ def test_entry_window_and_premarket_around_converted_open(session: date) -> None
     last_regular = regular_close(session) - timedelta(seconds=1)
     assert is_regular_session(last_regular)
     assert not is_regular_session(regular_close(session))
-    assert not can_enter_new(regular_close(session) - timedelta(minutes=1))  # after 11:00
+    assert not can_enter_new(regular_close(session) - timedelta(minutes=1))  # after 13:00
+    # 11:00 Chicago is still inside the v1.2 entry window.
+    eleven = datetime.combine(session, time(11, 0), tzinfo=CHICAGO)
+    assert can_enter_new(eleven)
+    assert can_enter_new(datetime.combine(session, time(12, 59), tzinfo=CHICAGO))
