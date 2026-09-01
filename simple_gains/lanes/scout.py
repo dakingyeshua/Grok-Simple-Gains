@@ -142,7 +142,7 @@ def upper_wick_fraction(bar: Candle) -> Decimal | None:
 def confirmation_closes_above_level(bar: Candle, level: Decimal) -> bool:
     """Wicks through the level do not count. Close must be strictly above.
 
-    Confirming 5-minute bar upper wick must be ≤ 5% of that bar's own range.
+    Confirming 5-minute bar upper wick must be ≤ 15% of that bar's own range.
     A doji (high == low) is a fail.
     """
     if bar.close <= level:

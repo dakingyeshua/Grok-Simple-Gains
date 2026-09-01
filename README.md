@@ -62,7 +62,7 @@ simple-gains serve
 
 1. **Scan** (premarket context from ~3:00 AM CDT) → watchlist. No orders.
 2. **Watchlist** names sit until the first 15-minute regular-session candle is complete (**8:45 AM** CDT).
-3. **Trigger** is a 5-minute candle that **closes** above **max(premarket high, first 15-minute high)**. Wicks through the level without a close do not count. The confirming bar’s upper wick must be **≤ 5%** of that bar’s own range; a doji (high == low) fails.
+3. **Trigger** is a 5-minute candle that **closes** above **max(premarket high, first 15-minute high)**. Wicks through the level without a close do not count. The confirming bar’s upper wick must be **≤ 15%** of that bar’s own range; a doji (high == low) fails. Bar stamps use the candle **close** time (Webull), not the open.
 4. **Grader** scores Scout survivors only (100-point model).
 5. **Risk Officer** sizes, gates, or vetoes. A veto is final for that ticker that day.
 6. **Paper fill** (or HITL alert) at the 5-minute close. Full size. One ticker, one ticket.
@@ -106,7 +106,7 @@ Copy `.env.example` to `.env` if you want these loaded automatically.
 
 ## Session clock
 
-Desk times are **America/Chicago**. NYSE cash hours are **9:30–16:00 America/New_York** and are converted (never treat 9:30 as a Chicago wall time). Constitution **v1.2** (locked 2026-08-31).
+Desk times are **America/Chicago**. NYSE cash hours are **9:30–16:00 America/New_York** and are converted (never treat 9:30 as a Chicago wall time). Constitution **v1.3** (locked 2026-09-01); entry cutoff and trigger level remain the v1.2 lock.
 
 - Premarket ~**3:00 AM** CDT: scan and context only. **Never orders.**
 - Regular open: **8:30 AM** America/Chicago (**9:30 ET**). Regular close: **3:00 PM** CDT (**16:00 ET**).
@@ -142,7 +142,8 @@ Patterns of interest (heuristic + HITL override fields on the Grader card): Inve
 
 - Level = **max(premarket high, first 15-minute regular-session high)**. Both highs **include wicks**.
 - Pass only if a 5-minute bar **closes** strictly above that level. A wick through the level without a close above is a fail.
-- The confirming 5-minute bar’s upper wick must be **≤ 5%** of that bar’s own range: `(high − close) / (high − low) ≤ 0.05`. If high == low (doji), fail.
+- The confirming 5-minute bar’s upper wick must be **≤ 15%** of that bar’s own range: `(high − close) / (high − low) ≤ 0.15`. If high == low (doji), fail.
+- Bar stamps use the candle **close** time (Webull), not the open. No retro fills when this number changes.
 - First 15-minute bar still completes at **8:45 AM** CDT. Premarket orders remain forbidden.
 
 ### Scout universe (cap ~15)

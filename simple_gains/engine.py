@@ -194,9 +194,9 @@ class Engine:
     def _confirmation(self, snap: MarketSnapshot, level: Decimal) -> Candle | None:
         if not snap.five_min:
             return None
-        # Skip bars inside the opening range. First ORB-eligible 5-minute
-        # close is the bar that opens when the first 15-minute candle completes
-        # (8:45 America/Chicago = 9:45 ET). Level is max(PMH, ORH).
+        # Skip bars inside the opening range. Bar stamps are candle CLOSE
+        # time (Webull), not the open. First ORB-eligible 5-minute close is
+        # 8:45 America/Chicago (9:45 ET). Level is max(PMH, ORH).
         or_end = opening_range_end(snap.session)
         for bar in snap.five_min:
             if as_chicago(bar.ts) < or_end:
