@@ -1,7 +1,8 @@
-"""Constitution v1.2 ORB trigger: max(PMH, ORH) + 5% upper-wick rule.
+"""Constitution v1.3 ORB trigger: max(PMH, ORH) + 15% upper-wick rule.
 
 Cover CDT and CST so the 8:45 opening-range end stays the NYSE conversion,
-not a hardcoded Chicago hour. Premarket high includes wicks.
+not a hardcoded Chicago hour. Premarket high includes wicks. Bar stamps
+are candle CLOSE time (Webull), not the open.
 """
 
 from __future__ import annotations
@@ -107,18 +108,18 @@ def test_orh_above_pmh_requires_close_above_orh(session: date) -> None:
     assert confirmation_closes_above_level(above_orh, level)
 
 
-def test_upper_wick_5_percent_pass_and_5_1_percent_fail() -> None:
-    assert CONFIRM_UPPER_WICK_MAX == Decimal("0.05")
+def test_upper_wick_15_percent_pass_and_15_1_percent_fail() -> None:
+    assert CONFIRM_UPPER_WICK_MAX == Decimal("0.15")
     ts = opening_range_end(CDT_DAY)
-    # range = 100; 5.0% upper wick → high-close = 5, close = 195.
-    pass_bar = _bar(ts, 150, 200, 100, 195)
-    assert upper_wick_fraction(pass_bar) == Decimal("0.05")
-    assert confirmation_closes_above_level(pass_bar, Decimal("190"))
+    # range = 100; 15.0% upper wick → high-close = 15, close = 185.
+    pass_bar = _bar(ts, 150, 200, 100, 185)
+    assert upper_wick_fraction(pass_bar) == Decimal("0.15")
+    assert confirmation_closes_above_level(pass_bar, Decimal("180"))
 
-    fail_bar = _bar(ts, 150, 200, 100, Decimal("194.9"))
-    assert upper_wick_fraction(fail_bar) == Decimal("0.051")
-    assert fail_bar.close > Decimal("190")
-    assert not confirmation_closes_above_level(fail_bar, Decimal("190"))
+    fail_bar = _bar(ts, 150, 200, 100, Decimal("184.9"))
+    assert upper_wick_fraction(fail_bar) == Decimal("0.151")
+    assert fail_bar.close > Decimal("180")
+    assert not confirmation_closes_above_level(fail_bar, Decimal("180"))
 
 
 def test_doji_high_equals_low_fails_even_if_close_above_level() -> None:

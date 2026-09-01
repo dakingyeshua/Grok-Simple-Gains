@@ -37,6 +37,7 @@ class JournalKind(str, Enum):
 
 
 class Candle(BaseModel):
+    # Bar stamp is the candle CLOSE time (Webull convention), not the open.
     ts: datetime
     open: Decimal
     high: Decimal

@@ -1,14 +1,19 @@
 """Locked product rules. Weights and constitution numbers are v1 — do not change.
 
-Constitution v1.2 (locked 2026-08-31) last NEW ENTRY cutoff is 13:00 America/Chicago.
-Hunt/scan cutoff is 12:45 Chicago. NYSE regular session is 9:30–16:00
-America/New_York, converted to America/Chicago (8:30–15:00). Never treat
-9:30 as a Chicago wall time. ORB trigger level is max(premarket high,
-first 15-minute high); a 5-minute bar must close above that level with
-an upper wick ≤ 5% of its own range.
+Constitution v1.3 (locked 2026-09-01) confirming 5-minute upper wick max is
+15% of that bar's own range (was 5% in v1.2). Formula unchanged:
+(high - close) / (high - low) ≤ 0.15. Doji (high == low) still fails.
+Close must still be above max(PMH, first 15-minute high). Bar stamps use
+the candle CLOSE time (Webull), not the open. No retro fills.
+
+v1.2 (locked 2026-08-31) still holds: last NEW ENTRY cutoff is 13:00
+America/Chicago (2:00 PM ET). Hunt/scan cutoff is 12:45 Chicago. NYSE
+regular session is 9:30–16:00 America/New_York, converted to
+America/Chicago (8:30–15:00). Never treat 9:30 as a Chicago wall time.
+ORB trigger level is max(premarket high, first 15-minute high).
 
 Do not change risk %, 85-bar skip, 6% book cap, 2-theme cap, breakers,
-scoring weights, or the +1R floor.
+scoring weights, Top Gainers hunt, broker adapters, or the +1R floor.
 """
 
 from __future__ import annotations
@@ -49,8 +54,9 @@ MAX_SPREAD_PCT = Decimal("0.50")  # 0.50% of mid
 
 # ORB trigger (hard pre-filter, not Grader points). Level = max(PMH, ORH).
 # Confirming 5-minute bar: close strictly above the level, and
-# (high - close) / (high - low) ≤ 5%. Doji (high == low) fails.
-CONFIRM_UPPER_WICK_MAX = Decimal("0.05")
+# (high - close) / (high - low) ≤ 15%. Doji (high == low) fails.
+# Candle.ts is the bar CLOSE (Webull), not the open.
+CONFIRM_UPPER_WICK_MAX = Decimal("0.15")
 
 # Chase / stretch: fail if last is already ≥ 0.8 × ADR above the trigger level
 # (max of premarket high and first 15-minute high) before confirmation.
