@@ -1,4 +1,4 @@
-"""Market data port. Finnhub today; another vendor can implement this later."""
+"""Market data port. Finnhub for quotes/news/profile; Twelve Data / yfinance for OHLCV."""
 
 from __future__ import annotations
 

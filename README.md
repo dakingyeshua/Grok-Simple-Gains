@@ -14,7 +14,8 @@ This version never places a live brokerage order. There are no Webull API calls 
 | --- | --- |
 | Paper fills at the 5-minute close | Live tickets of any kind |
 | HITL alerts instead of auto-fill | Invent live account balances |
-| Finnhub **market data** (quotes/candles/news) | Webull order routing |
+| Finnhub **quotes / news / profile** | Finnhub `/stock/candle` (free tier 403) |
+| **OHLCV** from Twelve Data (if `TWELVE_DATA_API_KEY` is set) else **yfinance** | Webull order routing |
 | Fixture replay with no API key | Scale-in or +2R scale-out |
 | Dashboard + CLI daily flow | Premarket orders |
 
@@ -49,10 +50,14 @@ simple-gains --fixtures serve
 
 `--fixtures` loads `tests/fixtures/session_orb.json` (session date `2024-03-15`) and freezes the clock to 10:00 America/Chicago so the entry window is open.
 
-### Paper a session with Finnhub
+### Paper a session with live market data
+
+Finnhub supplies quotes, news, and profiles. **Candles never come from Finnhub** (`/stock/candle` is 403 on the free tier). OHLCV is Twelve Data when `TWELVE_DATA_API_KEY` is set and non-empty, otherwise yfinance. Quote last is not a close.
 
 ```bash
 export FINNHUB_API_KEY=your_key
+# optional — Twelve Data first for OHLCV; omit to use yfinance
+export TWELVE_DATA_API_KEY=your_twelve_key
 simple-gains scan --tickers AAPL,NVDA,TSLA
 simple-gains session --tickers AAPL,NVDA,TSLA
 simple-gains serve
@@ -93,7 +98,8 @@ pytest
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `FINNHUB_API_KEY` | unset | Market data only. Tests and `--fixtures` run without it. |
+| `FINNHUB_API_KEY` | unset | Quotes, news, profile only. Tests and `--fixtures` run without it. Never used for candles. |
+| `TWELVE_DATA_API_KEY` | unset | When set, engine OHLCV uses Twelve Data first; otherwise yfinance. |
 | `SIMPLE_GAINS_DB` | `./data/simple_gains.sqlite` | Journal + paper book |
 | `SIMPLE_GAINS_MODE` | `paper` | `paper` \| `hitl` \| `live` |
 | `SIMPLE_GAINS_STARTING_EQUITY` | `1000` | Used when the book is first created |
@@ -246,7 +252,7 @@ Implement a future live adapter against `simple_gains.broker.base.Broker`. Do no
 simple_gains/
   lanes/          Scout, Grader, Risk Officer, Journal
   broker/         paper, HITL, Webull stub
-  data/           Finnhub + fixtures
+  data/           Finnhub (quotes/news) + Twelve Data/yfinance candles + fixtures
   clock.py        America/Chicago calendar
   config.py       locked weights and constitution
   engine.py       daily flow (does not score or size itself)
