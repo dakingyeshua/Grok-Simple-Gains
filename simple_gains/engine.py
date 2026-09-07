@@ -91,6 +91,7 @@ def build_broker(store: Store, mode: str | None = None) -> Broker:
 def build_data(use_fixtures: bool, fixture_path: Path | None = None) -> MarketData:
     if use_fixtures or not os.environ.get("FINNHUB_API_KEY"):
         return FixtureData(path=fixture_path)
+    # Finnhub quotes/news/profile only. OHLCV is Twelve Data or yfinance.
     return FinnhubData()
 
 

@@ -1,20 +1,26 @@
-"""Finnhub market-data adapter. Requires FINNHUB_API_KEY. Never places orders."""
+"""Finnhub market-data adapter. Requires FINNHUB_API_KEY. Never places orders.
+
+Quotes, news, and profiles stay on Finnhub. OHLCV does not: Finnhub
+/stock/candle is forbidden on the free tier (HTTP 403). The engine candle
+path uses Twelve Data or yfinance via ``simple_gains.data.candles``.
+"""
 
 from __future__ import annotations
 
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
 import httpx
 
-from simple_gains.clock import CHICAGO, as_chicago, regular_close, regular_open
 from simple_gains.data.base import MarketData
+from simple_gains.data.candles import fetch_ohlcv
 from simple_gains.data.fixtures import adr20, ema
 from simple_gains.models import Candle, MarketSnapshot, Profile, Quote
 
 BASE = "https://finnhub.io/api/v1"
+FINNHUB_CANDLE_PATH = "/stock/candle"
 
 THEME_BY_INDUSTRY = {
     "semiconductor": "semi",
@@ -37,6 +43,10 @@ class FinnhubError(RuntimeError):
     pass
 
 
+class FinnhubCandleForbidden(FinnhubError):
+    """Raised if anything on this adapter tries Finnhub /stock/candle."""
+
+
 class FinnhubData(MarketData):
     def __init__(self, api_key: str | None = None, client: httpx.Client | None = None) -> None:
         self.api_key = api_key or os.environ.get("FINNHUB_API_KEY", "")
@@ -53,6 +63,11 @@ class FinnhubData(MarketData):
             self._client.close()
 
     def _get(self, path: str, params: dict[str, Any]) -> Any:
+        if path.rstrip("/").endswith(FINNHUB_CANDLE_PATH) or FINNHUB_CANDLE_PATH in path:
+            raise FinnhubCandleForbidden(
+                "Finnhub /stock/candle is forbidden on the paper engine path "
+                "(free tier HTTP 403). Candle data comes from Twelve Data or yfinance."
+            )
         params = dict(params)
         params["token"] = self.api_key
         r = self._client.get(f"{BASE}{path}", params=params)
@@ -61,37 +76,8 @@ class FinnhubData(MarketData):
         return data
 
     def candles(self, ticker: str, session: date, resolution: str) -> list[Candle]:
-        if resolution == "D":
-            start = datetime.combine(session - timedelta(days=80), datetime.min.time(), tzinfo=CHICAGO)
-            end = regular_close(session)
-        else:
-            start = regular_open(session) - timedelta(minutes=5)
-            end = regular_close(session)
-        raw = self._get(
-            "/stock/candle",
-            {
-                "symbol": ticker.upper(),
-                "resolution": resolution,
-                "from": int(start.timestamp()),
-                "to": int(end.timestamp()),
-            },
-        )
-        if not raw or raw.get("s") != "ok":
-            return []
-        out = []
-        for t, o, h, l, c, v in zip(raw["t"], raw["o"], raw["h"], raw["l"], raw["c"], raw["v"]):
-            ts = as_chicago(datetime.fromtimestamp(int(t), tz=CHICAGO))
-            out.append(
-                Candle(
-                    ts=ts,
-                    open=Decimal(str(o)),
-                    high=Decimal(str(h)),
-                    low=Decimal(str(l)),
-                    close=Decimal(str(c)),
-                    volume=int(v),
-                )
-            )
-        return out
+        # ORB confirms and index tape. Quote last is not a close.
+        return fetch_ohlcv(ticker, session, resolution)
 
     def quote(self, ticker: str) -> Quote:
         raw = self._get("/quote", {"symbol": ticker.upper()})
