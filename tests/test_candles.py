@@ -30,6 +30,17 @@ def _bar(ts: datetime | None = None, close: str = "10.50") -> Candle:
     return Candle(ts=ts, open=px - Decimal("0.10"), high=px + Decimal("0.20"), low=px - Decimal("0.20"), close=px, volume=1000)
 
 
+class _JsonResp:
+    def __init__(self, payload) -> None:
+        self._payload = payload
+
+    def raise_for_status(self):
+        return self
+
+    def json(self):
+        return self._payload
+
+
 class _FailIfCandleClient:
     """httpx stand-in: any Finnhub candle URL fails the test immediately."""
 
@@ -43,11 +54,11 @@ class _FailIfCandleClient:
             raise AssertionError(f"Finnhub /stock/candle must not be requested: {full}")
         path = httpx.URL(full).path if "://" in full else full
         if path.endswith("/quote"):
-            return httpx.Response(200, json={"c": 27.41})
+            return _JsonResp({"c": 27.41})
         if path.endswith("/stock/profile2"):
-            return httpx.Response(200, json={"exchange": "NASDAQ", "finnhubIndustry": "retail"})
+            return _JsonResp({"exchange": "NASDAQ", "finnhubIndustry": "retail"})
         if path.endswith("/company-news"):
-            return httpx.Response(200, json=[{"headline": "desk note"}])
+            return _JsonResp([{"headline": "desk note"}])
         raise AssertionError(f"unexpected Finnhub request: {full}")
 
     def close(self) -> None:
@@ -66,17 +77,16 @@ def test_finnhub_stock_candle_attempt_fails_the_suite():
 def test_engine_sources_never_http_finnhub_stock_candle():
     root = Path(__file__).resolve().parents[1] / "simple_gains"
     call_re = re.compile(r"""_get\(\s*['\"]/?stock/candle""")
+    url_re = re.compile(r"""finnhub\.io[^'\"\n]*stock/candle""")
     offenders: list[str] = []
     for path in root.rglob("*.py"):
         text = path.read_text()
-        if call_re.search(text):
+        if call_re.search(text) or url_re.search(text):
             offenders.append(str(path.relative_to(root.parent)))
         if path.name == "finnhub.py":
             assert "FinnhubCandleForbidden" in text
             assert "FINNHUB_CANDLE_PATH" in text
-            continue
-        if "/stock/candle" in text:
-            offenders.append(str(path.relative_to(root.parent)))
+            assert "raise FinnhubCandleForbidden" in text
     assert offenders == []
 
 

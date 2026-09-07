@@ -1,6 +1,6 @@
 """Engine OHLCV helper. Twelve Data first, else yfinance. Never Finnhub candles.
 
-Desk rule: the paper engine must never call Finnhub /stock/candle (free tier 403).
+Desk rule: the paper engine must never call Finnhub candlesticks (free tier 403).
 Quote last is not a close — if no OHLCV arrives, return an empty list.
 """
 
