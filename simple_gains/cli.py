@@ -121,6 +121,21 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ingest_desk(args: argparse.Namespace) -> int:
+    import json
+
+    eng = _engine(args)
+    path = Path(args.path) if args.path else None
+    session = date.fromisoformat(args.date) if getattr(args, "date", None) else None
+    if path is not None and path.is_file():
+        raw = json.loads(path.read_text())
+        _print(eng.ingest_desk_artifact(raw))
+        return 0
+    reports = eng.resync_desk(session, directory=path)
+    _print({"resync": reports, "count": len(reports)})
+    return 0
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     store = default_store(Path(args.db) if args.db else DEFAULT_DB)
     acct = store.ensure_account()
@@ -187,6 +202,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--host")
     s.add_argument("--port")
     s.set_defaults(func=cmd_serve)
+
+    s = sub.add_parser("ingest-desk", help="Ingest authoritative desk grade card / ARMED ticket")
+    s.add_argument("--path", help="JSON file or desk artifact directory")
+    s.add_argument("--date", help="Session date YYYY-MM-DD (directory filter)")
+    s.set_defaults(func=cmd_ingest_desk)
     return p
 
 

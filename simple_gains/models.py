@@ -34,6 +34,19 @@ class JournalKind(str, Enum):
     FLATTEN = "flatten"
     AUTHORIZE = "authorize"
     S_TIER_FLAG = "s_tier_flag"
+    PATH_SPLIT = "path_split"
+    RESYNC = "resync"
+
+
+class TicketStatus(str, Enum):
+    ARMED = "ARMED"
+    FILLED = "FILLED"
+    CANCELLED = "CANCELLED"
+    SKIPPED = "SKIPPED"
+
+
+CARD_SOURCE_DESK = "desk"
+CARD_SOURCE_ENGINE = "engine"
 
 
 class Candle(BaseModel):
@@ -131,6 +144,44 @@ class ScoutVerdict(BaseModel):
         return [f.name for f in self.filters if f.passed]
 
 
+class GradeContract(BaseModel):
+    """Shared constitution inputs for confirm + grade.
+
+    Desk and engine must score from this contract (or from a written GraderCard).
+    Mechanical buckets are a pure function of these fields — identical contracts
+    produce identical totals. Live snapshots that omit Scout pattern / OR context
+    are not a second grader; they are missing inputs and must resync rather than
+    score cold.
+    """
+
+    ticker: str
+    session: date
+    pattern_hint: str = ""
+    level_note: str = ""
+    hitl_level_override: int | None = None
+    prior_day_low: Decimal | None = None
+    last_daily_close: Decimal | None = None
+    quote_last: Decimal = Decimal("0")
+    session_open: Decimal | None = None
+    spy_session_ret: Decimal = Decimal("0")
+    qqq_session_ret: Decimal = Decimal("0")
+    is_nasdaq: bool = False
+    confirmation: Candle | None = None
+    has_five_min: bool = False
+    prior_volumes: list[int] = Field(default_factory=list)
+    has_catalyst: bool = False
+    catalyst_note: str = ""
+    hitl_catalyst_override: int | None = None
+    daily_20_ema: Decimal | None = None
+    opening_range: Candle | None = None
+    adr: Decimal = Decimal("0")
+    premarket_high: Decimal | None = None
+    trigger_level: Decimal | None = None
+    theme: str = "other"
+    sector: str = "other"
+    source: str = CARD_SOURCE_ENGINE
+
+
 class BucketScores(BaseModel):
     level_pattern: int
     rs_vs_spy: int
@@ -171,6 +222,8 @@ class GraderCard(BaseModel):
     decision: Decision
     s_tier_session_flag: bool = False
     notes: str = ""
+    source: str = CARD_SOURCE_ENGINE
+    contract: GradeContract | None = None
 
     def require_complete_buckets(self) -> None:
         missing = [name for name in REQUIRED_BUCKETS if name not in self.buckets.as_dict()]
@@ -186,6 +239,19 @@ class GraderCard(BaseModel):
 
 class IncompleteGraderCard(ValueError):
     pass
+
+
+class PathSplitError(ValueError):
+    """Desk and engine produced different conviction cards. Keep desk; do not skip."""
+
+    def __init__(self, desk: GraderCard, engine: GraderCard) -> None:
+        self.desk = desk
+        self.engine = engine
+        super().__init__(
+            f"PATH SPLIT {desk.ticker} {desk.date}: desk {desk.total} {desk.tier} "
+            f"{desk.buckets.as_dict()} vs engine {engine.total} {engine.tier} "
+            f"{engine.buckets.as_dict()}"
+        )
 
 
 class RiskDecision(BaseModel):
@@ -215,6 +281,17 @@ class OrderTicket(BaseModel):
     grader_total: int
     tier: str
     reason: str = ""
+
+
+class DeskTicket(BaseModel):
+    """Authoritative desk ticket. ARMED survives engine restart; engine cannot skip it away."""
+
+    ticker: str
+    session: date
+    status: TicketStatus
+    ticket: OrderTicket
+    source: str = CARD_SOURCE_DESK
+    note: str = ""
 
 
 class Fill(BaseModel):

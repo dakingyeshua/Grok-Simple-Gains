@@ -80,3 +80,31 @@ class Journal:
     def breaker(self, ts: datetime, session: date, name: str, payload: dict[str, Any] | None = None) -> JournalEvent:
         body = {"name": name, **(payload or {})}
         return self.record(JournalKind.BREAKER, ts, session, "", body)
+
+    def path_split(
+        self,
+        ts: datetime,
+        session: date,
+        ticker: str,
+        desk: GraderCard,
+        engine: GraderCard,
+    ) -> JournalEvent:
+        return self.record(
+            JournalKind.PATH_SPLIT,
+            ts,
+            session,
+            ticker,
+            {
+                "desk_total": desk.total,
+                "engine_total": engine.total,
+                "desk_buckets": desk.buckets.as_dict(),
+                "engine_buckets": engine.buckets.as_dict(),
+                "desk_tier": desk.tier,
+                "engine_tier": engine.tier,
+                "note": "PATH SPLIT — keeping desk card/ticket; engine competing score discarded",
+            },
+            card=desk,
+        )
+
+    def resync(self, ts: datetime, session: date, ticker: str, payload: dict[str, Any], card: GraderCard | None = None) -> JournalEvent:
+        return self.record(JournalKind.RESYNC, ts, session, ticker, payload, card=card)

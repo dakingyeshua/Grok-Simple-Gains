@@ -15,12 +15,15 @@ from simple_gains.models import (
     AccountState,
     Alert,
     BreakerState,
+    DeskTicket,
     Fill,
+    GradeContract,
     GraderCard,
     JournalEvent,
     JournalKind,
     OrderTicket,
     Position,
+    TicketStatus,
 )
 
 SCHEMA = """
@@ -101,6 +104,21 @@ CREATE TABLE IF NOT EXISTS watchlist (
 );
 
 CREATE TABLE IF NOT EXISTS grader_cards (
+    session TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (session, ticker)
+);
+
+CREATE TABLE IF NOT EXISTS tickets (
+    session TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (session, ticker)
+);
+
+CREATE TABLE IF NOT EXISTS grade_inputs (
     session TEXT NOT NULL,
     ticker TEXT NOT NULL,
     payload TEXT NOT NULL,
@@ -387,7 +405,26 @@ class Store:
         ).fetchone()
         return row is not None
 
-    def save_card(self, card: GraderCard) -> None:
+    def save_card(self, card: GraderCard, *, replace: bool = False) -> tuple[GraderCard, str]:
+        """Persist a card. Engine must not replace a different stored card (PATH SPLIT).
+
+        Returns (stored, action) where action is insert | same | split | replaced.
+        Desk ingest may pass replace=True so a desk card wins over a cold engine skip.
+        """
+        from simple_gains.lanes.grader import cards_equivalent
+
+        existing = self.get_card(card.date, card.ticker)
+        if existing is None:
+            self._write_card(card)
+            return card, "insert"
+        if cards_equivalent(existing, card):
+            return existing, "same"
+        if replace:
+            self._write_card(card)
+            return card, "replaced"
+        return existing, "split"
+
+    def _write_card(self, card: GraderCard) -> None:
         self.conn.execute(
             """INSERT INTO grader_cards (session, ticker, payload) VALUES (?, ?, ?)
                ON CONFLICT(session, ticker) DO UPDATE SET payload=excluded.payload""",
@@ -395,11 +432,104 @@ class Store:
         )
         self.conn.commit()
 
+    def get_card(self, session: date, ticker: str) -> GraderCard | None:
+        row = self.conn.execute(
+            "SELECT payload FROM grader_cards WHERE session=? AND ticker=?",
+            (session.isoformat(), ticker.upper()),
+        ).fetchone()
+        if row is None:
+            return None
+        return GraderCard.model_validate(json.loads(row["payload"]))
+
     def cards(self, session: date) -> list[GraderCard]:
         rows = self.conn.execute(
             "SELECT payload FROM grader_cards WHERE session=?", (session.isoformat(),)
         ).fetchall()
         return [GraderCard.model_validate(json.loads(r["payload"])) for r in rows]
+
+    def save_grade_contract(self, contract: GradeContract) -> None:
+        self.conn.execute(
+            """INSERT INTO grade_inputs (session, ticker, payload) VALUES (?, ?, ?)
+               ON CONFLICT(session, ticker) DO UPDATE SET payload=excluded.payload""",
+            (contract.session.isoformat(), contract.ticker.upper(), _dumps(contract.model_dump(mode="json"))),
+        )
+        self.conn.commit()
+
+    def get_grade_contract(self, session: date, ticker: str) -> GradeContract | None:
+        row = self.conn.execute(
+            "SELECT payload FROM grade_inputs WHERE session=? AND ticker=?",
+            (session.isoformat(), ticker.upper()),
+        ).fetchone()
+        if row is None:
+            card = self.get_card(session, ticker)
+            if card is not None and card.contract is not None:
+                return card.contract
+            return None
+        return GradeContract.model_validate(json.loads(row["payload"]))
+
+    def save_ticket(self, desk_ticket: DeskTicket, *, allow_cancel: bool = False) -> DeskTicket:
+        """Persist a desk/engine ticket. Refuses to downgrade ARMED to skip/cancel."""
+        existing = self.get_ticket(desk_ticket.session, desk_ticket.ticker)
+        if (
+            existing is not None
+            and existing.status == TicketStatus.ARMED
+            and desk_ticket.status in {TicketStatus.SKIPPED, TicketStatus.CANCELLED}
+            and not allow_cancel
+        ):
+            return existing
+        self.conn.execute(
+            """INSERT INTO tickets (session, ticker, status, payload) VALUES (?, ?, ?, ?)
+               ON CONFLICT(session, ticker) DO UPDATE SET status=excluded.status, payload=excluded.payload""",
+            (
+                desk_ticket.session.isoformat(),
+                desk_ticket.ticker.upper(),
+                desk_ticket.status.value,
+                _dumps(desk_ticket.model_dump(mode="json")),
+            ),
+        )
+        self.conn.commit()
+        return desk_ticket
+
+    def get_ticket(self, session: date, ticker: str) -> DeskTicket | None:
+        row = self.conn.execute(
+            "SELECT payload FROM tickets WHERE session=? AND ticker=?",
+            (session.isoformat(), ticker.upper()),
+        ).fetchone()
+        if row is None:
+            return None
+        return DeskTicket.model_validate(json.loads(row["payload"]))
+
+    def tickets(self, session: date) -> list[DeskTicket]:
+        rows = self.conn.execute(
+            "SELECT payload FROM tickets WHERE session=? ORDER BY ticker",
+            (session.isoformat(),),
+        ).fetchall()
+        return [DeskTicket.model_validate(json.loads(r["payload"])) for r in rows]
+
+    def armed_ticket(self, session: date, ticker: str) -> DeskTicket | None:
+        """ARMED desk ticket, including unacknowledged HITL alerts from a prior process."""
+        row = self.get_ticket(session, ticker)
+        if row is not None and row.status == TicketStatus.ARMED:
+            return row
+        ticker = ticker.upper()
+        for alert in self.alerts(session=session, limit=200):
+            if alert.get("ticker") != ticker or alert.get("acknowledged"):
+                continue
+            raw = alert.get("ticket")
+            if not raw:
+                continue
+            ticket = OrderTicket.model_validate(raw)
+            if ticket.side != "buy":
+                continue
+            return DeskTicket(
+                ticker=ticker,
+                session=session,
+                status=TicketStatus.ARMED,
+                ticket=ticket,
+                source="hitl_alert",
+                note="resync from unacknowledged HITL alert",
+            )
+        return None
 
     def mark_equity(self, ts: datetime, session: date, equity: Decimal, reason: str = "") -> None:
         self.conn.execute(
