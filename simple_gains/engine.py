@@ -39,7 +39,12 @@ from simple_gains.config import (
 from simple_gains.data.base import MarketData
 from simple_gains.data.finnhub import FinnhubData
 from simple_gains.data.fixtures import FixtureData
-from simple_gains.lanes.grader import Grader
+from simple_gains.desk import load_desk_artifacts, parse_artifact
+from simple_gains.lanes.grader import (
+    Grader,
+    apply_contract,
+    apply_contract_to_verdict,
+)
 from simple_gains.lanes.journal import Journal
 from simple_gains.lanes.risk import RiskOfficer, next_stop
 from simple_gains.lanes.scout import (
@@ -51,14 +56,19 @@ from simple_gains.lanes.scout import (
     resolve_premarket_high,
 )
 from simple_gains.models import (
+    CARD_SOURCE_DESK,
+    CARD_SOURCE_ENGINE,
+    Alert,
     Candle,
     Decision,
+    DeskTicket,
+    GradeContract,
     GraderCard,
     JournalKind,
     MarketSnapshot,
     OrderTicket,
     Position,
-    ScoutVerdict,
+    TicketStatus,
 )
 from simple_gains.persist import Store
 
@@ -190,7 +200,11 @@ class Engine:
 
     def _snapshot(self, ticker: str, session: date) -> MarketSnapshot:
         on_wl = self.store.on_watchlist(session, ticker)
-        return self.data.snapshot(ticker, session, on_watchlist=on_wl)
+        snap = self.data.snapshot(ticker, session, on_watchlist=on_wl)
+        contract = self.store.get_grade_contract(session, ticker)
+        if contract is not None:
+            snap = apply_contract(snap, contract)
+        return snap
 
     def _confirmation(self, snap: MarketSnapshot, level: Decimal) -> Candle | None:
         if not snap.five_min:
@@ -206,6 +220,149 @@ class Engine:
                 return bar
         return None
 
+    def resync_desk(
+        self,
+        session: date | None = None,
+        ticker: str | None = None,
+        directory=None,
+    ) -> list[dict]:
+        """Load desk artifacts into the book. Never scores cold in place of a written card."""
+        session = session or self.session()
+        reports = []
+        for art in load_desk_artifacts(directory, session=session, ticker=ticker):
+            reports.append(self.ingest_desk_artifact(art))
+        return reports
+
+    def ingest_desk_artifact(self, raw: dict) -> dict:
+        card, ticket, contract = parse_artifact(raw)
+        return self.ingest_desk(card=card, ticket=ticket, contract=contract)
+
+    def ingest_desk(
+        self,
+        *,
+        card: GraderCard | None = None,
+        ticket: DeskTicket | None = None,
+        contract: GradeContract | None = None,
+    ) -> dict:
+        """Desk write-path. Desk cards replace a cold engine skip; engine cannot replace desk."""
+        report: dict = {"ingested": True}
+        if contract is not None:
+            self.store.save_grade_contract(contract)
+            report["contract"] = True
+        if card is not None:
+            card = card.model_copy(update={"source": CARD_SOURCE_DESK})
+            if card.contract is None and contract is not None:
+                card = card.model_copy(update={"contract": contract})
+            self.grader.validate_card(card)
+            stored, action = self.store.save_card(card, replace=True)
+            report["card"] = stored.model_dump(mode="json")
+            report["card_action"] = action
+            if "signal" not in self.store.journal_kinds_for(stored.date, stored.ticker):
+                extra = {"source": "desk_ingest"}
+                if contract is not None and contract.opening_range is not None:
+                    extra["orh"] = str(contract.opening_range.high)
+                if contract is not None and contract.premarket_high is not None:
+                    extra["pmh"] = str(contract.premarket_high)
+                if contract is not None and contract.trigger_level is not None:
+                    extra["trigger_level"] = str(contract.trigger_level)
+                self.journal.signal(self.now(), stored, extra=extra)
+        if ticket is not None:
+            prior = self.store.get_ticket(ticket.session, ticket.ticker)
+            kept = self.store.save_ticket(ticket)
+            report["ticket"] = kept.model_dump(mode="json")
+            if prior is None and kept.status == TicketStatus.ARMED:
+                self._write_armed_alert(kept, self.now(), card)
+        return report
+
+    def _write_armed_alert(self, desk_ticket: DeskTicket, ts, card: GraderCard | None) -> None:
+        ticket = desk_ticket.ticket
+        alert = Alert(
+            ts=ts,
+            session=ticket.session,
+            ticker=ticket.ticker,
+            message=(
+                f"ARMED {ticket.shares} {ticket.ticker} ~{ticket.intended_price} "
+                f"stop {ticket.stop} ({ticket.tier} {ticket.grader_total}) — HITL, no auto-print"
+            ),
+            ticket=ticket,
+        )
+        self.store.add_alert(alert)
+        self.journal.record(
+            JournalKind.ALERT,
+            ts,
+            ticket.session,
+            ticket.ticker,
+            {"message": alert.message, "ticket": ticket.model_dump(mode="json"), "status": TicketStatus.ARMED.value},
+            card=card,
+        )
+
+    def _arm_ticket(self, ticket: OrderTicket, ts, card: GraderCard, note: str) -> DeskTicket:
+        desk = DeskTicket(
+            ticker=ticket.ticker,
+            session=ticket.session,
+            status=TicketStatus.ARMED,
+            ticket=ticket,
+            source=card.source,
+            note=note,
+        )
+        kept = self.store.save_ticket(desk)
+        if kept.status == TicketStatus.ARMED:
+            self._write_armed_alert(kept, ts, card)
+        return kept
+
+    def _preserve_armed(self, now, session: date, ticker: str) -> dict | None:
+        armed = self.store.armed_ticket(session, ticker)
+        if armed is None:
+            return None
+        self.store.save_ticket(armed)
+        card = self.store.get_card(session, ticker)
+        self.journal.resync(
+            now,
+            session,
+            ticker,
+            {
+                "reason": "desk_armed_preserved",
+                "ticket_status": armed.status.value,
+                "grader_total": armed.ticket.grader_total,
+                "card_total": card.total if card else None,
+                "note": "authoritative desk ticket ARMED — engine will not regrade or skip",
+            },
+            card=card,
+        )
+        result: dict = {
+            "ticker": ticker,
+            "session": session.isoformat(),
+            "decision": "desk_armed",
+            "ticket": armed.model_dump(mode="json"),
+            "note": "authoritative desk ticket ARMED — engine will not regrade or skip",
+        }
+        if card is not None:
+            result["card"] = card.model_dump(mode="json")
+        return result
+
+    def _path_split_result(self, now, session: date, ticker: str, desk: GraderCard, engine: GraderCard) -> dict:
+        self.journal.path_split(now, session, ticker, desk, engine)
+        return {
+            "ticker": ticker,
+            "session": session.isoformat(),
+            "decision": "path_split",
+            "card": desk.model_dump(mode="json"),
+            "engine_card": engine.model_dump(mode="json"),
+            "note": (
+                f"PATH SPLIT {ticker}: desk {desk.total} {desk.tier} vs engine "
+                f"{engine.total} {engine.tier} — desk kept, ticket not cancelled"
+            ),
+        }
+
+    def _hold_stored_card(self, ticker: str, session: date, card: GraderCard, reason: str) -> dict:
+        return {
+            "ticker": ticker,
+            "session": session.isoformat(),
+            "decision": "stored_card",
+            "card": card.model_dump(mode="json"),
+            "note": reason,
+        }
+
     def evaluate_ticker(self, ticker: str, session: date | None = None) -> dict:
         session = session or self.session()
         now = self.now()
@@ -216,6 +373,14 @@ class Engine:
             result["error"] = "live stub refuses all work that would send an order"
             return result
 
+        self.resync_desk(session, ticker=ticker)
+        held = self._preserve_armed(now, session, ticker)
+        if held is not None:
+            return held
+
+        stored_card = self.store.get_card(session, ticker)
+        contract = self.store.get_grade_contract(session, ticker)
+
         snap = self._snapshot(ticker, session)
         or_bar = opening_range_candle(snap.five_min, session)
         if or_bar is None and snap.fifteen_min:
@@ -224,6 +389,8 @@ class Engine:
         pmh = resolve_premarket_high(snap)
         level = orb_trigger_level(pmh, or_high) if or_high is not None else None
         confirm = self._confirmation(snap, level) if level is not None else None
+        if confirm is None and contract is not None and contract.confirmation is not None:
+            confirm = contract.confirmation
 
         open_pos = self.broker.positions()
         verdict = self.scout.evaluate(
@@ -233,20 +400,36 @@ class Engine:
             already_open_ticker=any(p.ticker == ticker for p in open_pos),
             confirmation=confirm,
         )
+        if contract is not None:
+            verdict = apply_contract_to_verdict(verdict, contract)
+            if confirm is None:
+                confirm = verdict.confirmation
         result["scout"] = verdict.model_dump(mode="json")
 
         if not verdict.passed:
+            if stored_card is not None and stored_card.decision != Decision.SKIP:
+                return self._hold_stored_card(
+                    ticker, session, stored_card, "stored passing card held; scout fail does not regrade"
+                )
             self.journal.skip(now, session, ticker, verdict.reason or "scout_fail")
             result["decision"] = "scout_fail"
             return result
 
         if confirm is None or verdict.opening_range is None:
+            if stored_card is not None and stored_card.decision != Decision.SKIP:
+                return self._hold_stored_card(
+                    ticker, session, stored_card, "stored passing card held; no competing skip"
+                )
             self.journal.skip(now, session, ticker, "no_5m_close_above_trigger")
             result["decision"] = "waiting_trigger"
             return result
 
         # Trigger is the 5-minute close, not the score.
         if not can_enter_new(confirm.ts) or is_premarket(confirm.ts):
+            if stored_card is not None and stored_card.decision != Decision.SKIP:
+                return self._hold_stored_card(
+                    ticker, session, stored_card, "stored passing card held; confirmation outside window is not a regrade"
+                )
             self.journal.skip(now, session, ticker, "confirmation_outside_entry_window")
             result["decision"] = "time_fail"
             return result
@@ -256,21 +439,29 @@ class Engine:
         self.risk.update_breakers(breakers, account, open_pos, session)
         self.store.save_breakers(breakers)
 
-        card = self.grader.score(snap, verdict, s_tier_already=breakers.s_tier_count)
-        self.store.save_card(card)
-        self.journal.signal(
-            now,
-            card,
-            extra={
-                "orh": str(verdict.opening_range.high),
-                "pmh": str(verdict.premarket_high) if verdict.premarket_high is not None else None,
-                "trigger_level": str(verdict.trigger_level) if verdict.trigger_level is not None else None,
-                "trigger": str(confirm.close),
-            },
-        )
+        if stored_card is not None:
+            card = stored_card
+            result["score_source"] = card.source
+        else:
+            card = self.grader.score(snap, verdict, s_tier_already=breakers.s_tier_count)
+            saved, action = self.store.save_card(card)
+            if action == "split":
+                return self._path_split_result(now, session, ticker, saved, card)
+            card = saved
+            self.journal.signal(
+                now,
+                card,
+                extra={
+                    "orh": str(verdict.opening_range.high),
+                    "pmh": str(verdict.premarket_high) if verdict.premarket_high is not None else None,
+                    "trigger_level": str(verdict.trigger_level) if verdict.trigger_level is not None else None,
+                    "trigger": str(confirm.close),
+                },
+            )
+            result["score_source"] = CARD_SOURCE_ENGINE
         result["card"] = card.model_dump(mode="json")
 
-        if card.tier == "S":
+        if stored_card is None and card.tier == "S":
             breakers.s_tier_count += 1
             if breakers.s_tier_count >= S_TIER_FLAG_COUNT:
                 self.journal.record(
@@ -325,8 +516,25 @@ class Engine:
             tier=card.tier,
             reason="orb_5m_close_above_trigger",
         )
+        # Desk cards are HITL: never auto-print. Engine paper fills remain the paper-mode path.
+        if card.source == CARD_SOURCE_DESK:
+            armed = self._arm_ticket(ticket, now, card, "desk card — HITL, no auto-print")
+            result["decision"] = "desk_armed"
+            result["ticket"] = armed.model_dump(mode="json")
+            return result
+
         fill = self.broker.place_market_buy(ticket, confirm.ts, decision.planned_entry)
         if fill.shares == 0 and fill.note == "hitl_alert_no_fill":
+            self.store.save_ticket(
+                DeskTicket(
+                    ticker=ticker,
+                    session=session,
+                    status=TicketStatus.ARMED,
+                    ticket=ticket,
+                    source="engine_hitl",
+                    note="HITL alert — no auto fill",
+                )
+            )
             self.journal.record(
                 JournalKind.ALERT,
                 now,
@@ -350,6 +558,16 @@ class Engine:
             pos.fill_price = fill.price
             self.store.save_position(pos)
 
+        self.store.save_ticket(
+            DeskTicket(
+                ticker=ticker,
+                session=session,
+                status=TicketStatus.FILLED,
+                ticket=ticket,
+                source=card.source,
+                note="paper fill",
+            )
+        )
         self.journal.fill(
             confirm.ts,
             session,
@@ -491,6 +709,7 @@ class Engine:
         session = session or self.session()
         if not is_session_day(session):
             return {"error": f"{session} is not a US equity session day"}
+        self.resync_desk(session)
         watch = self.scan(tickers, session)
         names = [w["ticker"] for w in watch]
         evaluations = [self.evaluate_ticker(t, session) for t in names]
@@ -534,6 +753,7 @@ class Engine:
             "positions": positions,
             "breakers": self.store.load_breakers().model_dump(mode="json"),
             "cards": [c.model_dump(mode="json") for c in self.store.cards(session)],
+            "tickets": [t.model_dump(mode="json") for t in self.store.tickets(session)],
             "journal": [e.model_dump(mode="json") for e in self.store.journal(limit=80)],
             "equity_curve": self.store.equity_curve(),
             "alerts": self.store.alerts(limit=20),

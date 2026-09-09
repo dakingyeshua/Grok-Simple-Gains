@@ -14,6 +14,10 @@ ORB trigger level is max(premarket high, first 15-minute high).
 
 Do not change risk %, 85-bar skip, 6% book cap, 2-theme cap, breakers,
 scoring weights, Top Gainers hunt, broker adapters, or the +1R floor.
+
+Desk and engine share one Grader / GradeContract. A written desk card or
+ARMED ticket is authoritative; the engine must not overwrite it with a
+cold regrade. PATH SPLIT is a hard alarm if two cards still diverge.
 """
 
 from __future__ import annotations

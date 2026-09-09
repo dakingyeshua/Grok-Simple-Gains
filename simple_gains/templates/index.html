@@ -86,10 +86,24 @@
           <td>{{ c.total }}</td>
           <td>{{ c.tier }}</td>
           <td>{{ c.mapped_risk_pct }}</td>
-          <td>{{ c.decision }}</td>
+          <td>{{ c.decision }}{% if c.source %} · {{ c.source }}{% endif %}</td>
         </tr>
         {% else %}
         <tr><td colspan="5" class="muted">No cards this session.</td></tr>
+        {% endfor %}
+      </table>
+      <h2>Desk tickets</h2>
+      <table>
+        <tr><th>Ticker</th><th>Status</th><th>Total</th><th>Shares</th></tr>
+        {% for t in d.tickets %}
+        <tr>
+          <td>{{ t.ticker }}</td>
+          <td>{{ t.status }}</td>
+          <td>{{ t.ticket.grader_total }}</td>
+          <td>{{ t.ticket.shares }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No desk tickets this session.</td></tr>
         {% endfor %}
       </table>
     </section>

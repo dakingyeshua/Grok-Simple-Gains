@@ -82,6 +82,7 @@ simple-gains manage
 simple-gains postmortem --text "what I did wrong"
 simple-gains weekly-review --text "week notes"
 simple-gains authorize          # after a portfolio stop only
+simple-gains ingest-desk --path data/desk/BE.json
 simple-gains --mode hitl --fixtures session
 simple-gains --mode live status # stub — refuses orders
 ```
@@ -104,6 +105,7 @@ pytest
 | `SIMPLE_GAINS_MODE` | `paper` | `paper` \| `hitl` \| `live` |
 | `SIMPLE_GAINS_STARTING_EQUITY` | `1000` | Used when the book is first created |
 | `SIMPLE_GAINS_SLIPPAGE_BPS` | `0` | Extra adverse fill on paper market orders |
+| `SIMPLE_GAINS_DESK_DIR` | `./data/desk` | JSON desk artifacts (authoritative grade card + ARMED ticket) loaded on resync |
 | `SIMPLE_GAINS_HOST` / `SIMPLE_GAINS_PORT` | `127.0.0.1` / `8000` | Dashboard bind |
 
 Copy `.env.example` to `.env` if you want these loaded automatically.
@@ -129,6 +131,8 @@ Desk times are **America/Chicago**. NYSE cash hours are **9:30–16:00 America/N
 2. **Grader** — 100-point conviction on Scout survivors only. Does not hunt. Does not size.
 3. **Risk Officer** — size + gates + veto. A veto is final for that setup that day. Grader cannot rescore a veto into a pass the same day.
 4. **Journal** — append-only. Rejects any Grader card that lacks the six-bucket split.
+
+**One score path.** Desk (Scout → Grader → Risk → Smiler) and the paper engine share the same Grader module and `GradeContract`. When the desk has written a grade card or ARMED ticket, that card is authoritative — the engine resyncs it and must not invent a competing 100-point total. Auto-print of desk tickets stays HITL (off). A PATH SPLIT journal event is a hard safety alarm if two cards still diverge; keep the desk card and do not cancel ARMED.
 
 Patterns of interest (heuristic + HITL override fields on the Grader card): Inverted Head & Shoulders, Cup & Handle, clean daily / 15-minute levels.
 
@@ -253,6 +257,7 @@ simple_gains/
   lanes/          Scout, Grader, Risk Officer, Journal
   broker/         paper, HITL, Webull stub
   data/           Finnhub (quotes/news) + Twelve Data/yfinance candles + fixtures
+  desk.py         Desk artifact ingest (authoritative card + ARMED ticket)
   clock.py        America/Chicago calendar
   config.py       locked weights and constitution
   engine.py       daily flow (does not score or size itself)
