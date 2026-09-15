@@ -474,7 +474,7 @@ class Engine:
             self.store.save_breakers(breakers)
 
         if card.decision == Decision.SKIP:
-            self.journal.skip(now, session, ticker, "below_85_never_round_up", card=card)
+            self.journal.skip(now, session, ticker, "below_80_never_round_up", card=card)
             result["decision"] = "skip"
             return result
 

@@ -36,7 +36,7 @@ def test_grader_mechanical_card_has_six_buckets_and_locked_map():
         "opening_range_quality",
     }
     Grader().validate_card(card)
-    if card.total < 85:
+    if card.total < 80:
         assert card.decision == Decision.SKIP
         assert card.mapped_risk_pct == Decimal("0")
 

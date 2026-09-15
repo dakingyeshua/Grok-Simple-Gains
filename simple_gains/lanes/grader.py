@@ -9,7 +9,10 @@ from simple_gains.config import (
     REQUIRED_BUCKETS,
     S_TIER_FLAG_COUNT,
     SKIP_BELOW,
+    TIER_A,
+    TIER_A_PLUS,
     TIER_RISK_PCT,
+    TIER_S,
 )
 from simple_gains.models import (
     CARD_SOURCE_DESK,
@@ -30,14 +33,16 @@ class GraderError(ValueError):
 
 
 def tier_for_total(total: int) -> str:
-    """Locked map. Totals below 85 never round up to a trade."""
+    """Locked map. Totals below 80 never round up to a trade."""
     if total < SKIP_BELOW:
         return "skip"
-    if total <= 89:
+    if total in TIER_A:
         return "A"
-    if total <= 94:
+    if total in TIER_A_PLUS:
         return "A+"
-    return "S"
+    if total in TIER_S:
+        return "S"
+    return "skip"
 
 
 def decision_for_tier(tier: str) -> Decision:
@@ -273,7 +278,7 @@ class Grader:
                 f"total {card.total} does not match six-bucket sum {expected}"
             )
         if card.total < SKIP_BELOW and card.decision != Decision.SKIP:
-            raise IncompleteGraderCard("below 85 must be skip; never round up")
+            raise IncompleteGraderCard("below 80 must be skip; never round up")
         if card.tier != tier_for_total(card.total):
             raise IncompleteGraderCard("tier does not match locked map")
         if card.mapped_risk_pct != mapped_risk(card.tier):

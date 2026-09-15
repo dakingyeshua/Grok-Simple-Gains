@@ -9,6 +9,7 @@ import pytest
 from simple_gains.clock import CHICAGO, Clock, regular_open
 from simple_gains.data.fixtures import FixtureData, make_orb_bars
 from simple_gains.engine import Engine, build_broker
+from simple_gains.lanes.grader import decision_for_tier, mapped_risk, tier_for_total
 from simple_gains.models import (
     BucketScores,
     Candle,
@@ -114,10 +115,10 @@ def make_card(
             buckets = buckets.model_copy(update={"catalyst": max(0, 12 - (90 - total))})
             # rebuild exact total if needed by tests that pass explicit buckets
     if decision is None:
-        decision = Decision.SKIP if total < 85 else (Decision.A if total < 90 else (Decision.A_PLUS if total < 95 else Decision.S))
-    risk = {"skip": "0", "A": "0.010", "A+": "0.015", "S": "0.020"}[
-        "skip" if decision == Decision.SKIP else decision.value
-    ]
+        tier = tier_for_total(total)
+        decision = decision_for_tier(tier)
+    else:
+        tier = "skip" if decision == Decision.SKIP else decision.value
     return GraderCard(
         ticker=ticker,
         date=SESSION,
@@ -133,8 +134,8 @@ def make_card(
         ],
         buckets=buckets,
         total=buckets.capped_total() if total == 90 else total,
-        tier="skip" if decision == Decision.SKIP else decision.value,
-        mapped_risk_pct=Decimal(risk),
+        tier=tier,
+        mapped_risk_pct=mapped_risk(tier),
         theme=theme,
         sector=theme,
         spy_qqq_headwind_note="SPY session 0.10%",
