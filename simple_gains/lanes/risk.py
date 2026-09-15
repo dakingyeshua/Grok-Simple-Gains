@@ -21,6 +21,7 @@ from simple_gains.config import (
     PLANNING_SLIPPAGE_BUFFER_BPS,
     PORTFOLIO_STOP_PCT,
     RISK_CEILING_PCT,
+    SKIP_BELOW,
     STREAK_LOSS_LIMIT,
     THEME_NAME_CAP,
     TWO_R,
@@ -189,8 +190,8 @@ class RiskOfficer:
                 veto_reason=f"veto_stands:{already_vetoed}",
             )
 
-        if card.decision == Decision.SKIP or card.total < 85 or card.mapped_risk_pct <= 0:
-            return RiskDecision(accepted=False, skip_reason="below_85_or_skip_tier")
+        if card.decision == Decision.SKIP or card.total < SKIP_BELOW or card.mapped_risk_pct <= 0:
+            return RiskDecision(accepted=False, skip_reason="below_80_or_skip_tier")
 
         blocked, why = breakers.new_entries_blocked(card.date)
         if blocked:

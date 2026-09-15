@@ -1,5 +1,9 @@
 """Locked product rules. Weights and constitution numbers are v1 — do not change.
 
+Constitution v1.4 (locked 2026-09-15) score→risk map (desk-authoritative):
+below 80 skip (never round up); 80–84 A 1.0%; 85–94 A+ 1.5%; 95–100 S 2.0%.
+Sizing, ARMED, and paper-print eligibility follow this map (80+).
+
 Constitution v1.3 (locked 2026-09-01) confirming 5-minute upper wick max is
 15% of that bar's own range (was 5% in v1.2). Formula unchanged:
 (high - close) / (high - low) ≤ 0.15. Doji (high == low) still fails.
@@ -12,7 +16,7 @@ regular session is 9:30–16:00 America/New_York, converted to
 America/Chicago (8:30–15:00). Never treat 9:30 as a Chicago wall time.
 ORB trigger level is max(premarket high, first 15-minute high).
 
-Do not change risk %, 85-bar skip, 6% book cap, 2-theme cap, breakers,
+Do not change risk %, 80-bar skip, 6% book cap, 2-theme cap, breakers,
 scoring weights, Top Gainers hunt, broker adapters, or the +1R floor.
 
 Desk and engine share one Grader / GradeContract. A written desk card or
@@ -90,9 +94,9 @@ BUCKET_MAX = {
 REQUIRED_BUCKETS = tuple(BUCKET_MAX.keys())
 assert sum(BUCKET_MAX.values()) == 100
 
-SKIP_BELOW = 85  # never round up
-TIER_A = range(85, 90)       # 85–89
-TIER_A_PLUS = range(90, 95)  # 90–94
+SKIP_BELOW = 80  # never round up
+TIER_A = range(80, 85)       # 80–84
+TIER_A_PLUS = range(85, 95)  # 85–94
 TIER_S = range(95, 101)      # 95–100
 
 TIER_RISK_PCT = {

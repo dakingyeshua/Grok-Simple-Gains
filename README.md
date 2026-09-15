@@ -114,7 +114,7 @@ Copy `.env.example` to `.env` if you want these loaded automatically.
 
 ## Session clock
 
-Desk times are **America/Chicago**. NYSE cash hours are **9:30–16:00 America/New_York** and are converted (never treat 9:30 as a Chicago wall time). Constitution **v1.3** (locked 2026-09-01); entry cutoff and trigger level remain the v1.2 lock.
+Desk times are **America/Chicago**. NYSE cash hours are **9:30–16:00 America/New_York** and are converted (never treat 9:30 as a Chicago wall time). Constitution **v1.4** (locked 2026-09-15) score→risk map; wick rule remains the v1.3 lock; entry cutoff and trigger level remain the v1.2 lock.
 
 - Premarket ~**3:00 AM** CDT: scan and context only. **Never orders.**
 - Regular open: **8:30 AM** America/Chicago (**9:30 ET**). Regular close: **3:00 PM** CDT (**16:00 ET**).
@@ -185,9 +185,9 @@ Do not change these weights.
 
 | Total | Tier | Mapped risk |
 | --- | --- | --- |
-| &lt; 85 | skip | 0% |
-| 85–89 | A | 1.0% |
-| 90–94 | A+ | 1.5% |
+| &lt; 80 | skip | 0% |
+| 80–84 | A | 1.0% |
+| 85–94 | A+ | 1.5% |
 | 95–100 | S | 2.0% |
 
 S-tier must be rare. The engine **flags** (does not auto-veto) if three S names print in a session.

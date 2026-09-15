@@ -30,7 +30,8 @@ BE_SESSION = SESSION  # same calendar as fixture clock / ORB bars
 
 
 def _desk_be_buckets() -> BucketScores:
-    # 2026-09-08 desk Grader: Level 18 / RS 20 / Vol 18 / Cat 12 / EMA 10 / OR 8 = 86 A
+    # 2026-09-08 desk Grader: Level 18 / RS 20 / Vol 18 / Cat 12 / EMA 10 / OR 8 = 86.
+    # v1.4 map (2026-09-15): 85–94 is A+ 1.5%. Desk score stays 86; engine aligns the tier.
     return BucketScores(
         level_pattern=18,
         rs_vs_spy=20,
@@ -195,12 +196,12 @@ def test_thin_be_snapshot_mechanical_card_is_the_incident_52():
     assert card.decision == Decision.SKIP
 
 
-def test_desk_be_card_is_86_a():
+def test_desk_be_card_is_86_a_plus():
     card = desk_be_card()
     assert card.total == 86
-    assert card.tier == "A"
-    assert card.mapped_risk_pct == Decimal("0.010")
-    assert card.decision == Decision.A
+    assert card.tier == "A+"
+    assert card.mapped_risk_pct == Decimal("0.015")
+    assert card.decision == Decision.A_PLUS
     assert card.buckets.as_dict() == _desk_be_buckets().as_dict()
 
 
